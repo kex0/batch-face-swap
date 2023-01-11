@@ -10,7 +10,7 @@ from modules.shared import opts, cmd_opts, state
 import cv2
 import mediapipe as mp
 import numpy as np
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 import math
 
 global skip
@@ -161,7 +161,11 @@ def generateMasks(path, divider, howSplit, saveMask, pathToSave):
         if state.interrupted:
             state.interrupted = False
         imgPath = os.path.join(dirPath, file)
-        image = Image.open(imgPath)
+        try:
+            image = Image.open(imgPath)
+        except UnidentifiedImageError:
+            print(f"{file} is not an image.")
+            continue
         width, height = image.size
         try:
             skip = 0
@@ -258,7 +262,11 @@ class Script(scripts.Script):
             if state.interrupted:
                 break
             imgPath = os.path.join(dirPath, file)
-            image = Image.open(imgPath)
+            try:
+                image = Image.open(imgPath)
+            except UnidentifiedImageError:
+                print(f"{file} is not an image.")
+                continue
             width, height = image.size
             p.init_images = [image]
             if overrideDenoising == True:
