@@ -1,13 +1,9 @@
 ## Batch Face Swap for https://github.com/AUTOMATIC1111/stable-diffusion-webui
  Automaticaly detects faces and replaces them.
 
-## Requirements
-MediaPipe Python package
-To install it, just open `requirements_versions.txt` located in your stable-diffusion-webui folder and add `mediapipe`
-
 ## Installation and Requirements
-The face detection requires MediaPipe Python package
-To install it, just open `requirements_versions.txt` located in your stable-diffusion-webui folder and add `mediapipe`
+The face detection requires MediaPipe Python package.
+To install it, just open `requirements_versions.txt` located in your stable-diffusion-webui folder and add `mediapipe`.
 
 To install the script just download the zipped script **[Here](https://github.com/kex0/batch-face-swap/archive/refs/heads/main.zip)**
 and copy the file `face_swap.py` into your scripts folder.
@@ -33,6 +29,7 @@ by just clicking the `Generate masks` button at the very bottom.
 ## Example
 ![example](https://user-images.githubusercontent.com/46696708/211818536-7d3bd06e-f6b1-40e9-854e-9cb44be3b2f8.png)
 
+Prompt:
 ```ShellSession
 detailed closeup photo of Emma Watson, 35mm, dslr
 Negative prompt: (painting:1.3), (concept art:1.2), artstation, sketch, illustration, drawing, blender, octane, 3d, render, blur, smooth, low-res, grain, cartoon, watermark, text, out of focus
