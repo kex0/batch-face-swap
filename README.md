@@ -24,6 +24,8 @@ Tip:
 You can check how many faces do your current settings find before you start generating with the stable diffusion 
 by just clicking the `Generate masks` button at the very bottom.
 
+![chrome_rG5p4wIaPD](https://user-images.githubusercontent.com/46696708/211926044-6b46297f-0605-45c8-8d53-3ee458b93f17.png)
+
 ## Example
 ![example](https://user-images.githubusercontent.com/46696708/211818536-7d3bd06e-f6b1-40e9-854e-9cb44be3b2f8.png)
 
