@@ -5,8 +5,11 @@
 MediaPipe Python package
 To install it, just open `requirements_versions.txt` located in your stable-diffusion-webui folder and add `mediapipe`
 
-## Installation
-**[Download the zipped script Here](https://github.com/kex0/batch-face-swap/archive/refs/heads/main.zip)**
+## Installation and Requirements
+The face detection requires MediaPipe Python package
+To install it, just open `requirements_versions.txt` located in your stable-diffusion-webui folder and add `mediapipe`
+
+To install the script just download the zipped script **[Here](https://github.com/kex0/batch-face-swap/archive/refs/heads/main.zip)**
 and copy the file `face_swap.py` into your scripts folder.
 
 ## Guide
