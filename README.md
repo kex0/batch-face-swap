@@ -1,5 +1,7 @@
 ## Batch Face Swap extension for https://github.com/AUTOMATIC1111/stable-diffusion-webui
  Automaticaly detects faces and replaces them.
+ 
+![example1](https://user-images.githubusercontent.com/46696708/211933260-7a27cc13-e33a-4bf1-911f-43e0aa97b96c.png)
 
 ## Installation
 1. Use `git clone https://github.com/kex0/batch-face-swap.git` from your SD web UI `/extensions` folder. 
