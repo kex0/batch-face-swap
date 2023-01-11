@@ -1,12 +1,10 @@
-## Batch Face Swap for https://github.com/AUTOMATIC1111/stable-diffusion-webui
+## Batch Face Swap extension for https://github.com/AUTOMATIC1111/stable-diffusion-webui
  Automaticaly detects faces and replaces them.
 
-## Installation and Requirements
-The face detection requires MediaPipe Python package.
-To install it, just open `requirements_versions.txt` located in your stable-diffusion-webui folder and add `mediapipe`.
-
-To install the script just download the zipped script **[Here](https://github.com/kex0/batch-face-swap/archive/refs/heads/main.zip)**
-and copy the file `face_swap.py` into your scripts folder.
+## Installation
+1. Use `git clone https://github.com/kex0/batch-face-swap.git` from your SD web UI `/extensions` folder. 
+Alternatively, install from the extensions tab with url `https://github.com/kex0/batch-face-swap`
+2. Start or reload SD web UI.
 
 ## Guide
 1. Open `img2img` tab. (you don't have to go to the `Inpaint` tab, if you do, you have to set "Mask source" to "Upload mask" or generation won't work)
