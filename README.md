@@ -16,6 +16,7 @@ and copy the file `face_swap.py` into your scripts folder.
 4. (Optional) It may sometimes fail to find a face if the face is very small in comparison to the size of the image.
 So, you can tell it to split the image and look at the smaller portions of the image by using the `How many times to divide image` slider.
 (don't worry it will stitch the image back together)
+5. Click `Generate`
 
 If you want to adjust `Denoising strength` or `Mask blur` you have to disable the override checkboxes.
 
