@@ -39,7 +39,7 @@ def getFacialLandmarks(image):
                 facelandmarks.append(np.array(landmarks, np.int32))
         return facelandmarks
 
-def findFaceDivide(image, width, height, divider, onlyHorizontal, onlyVertical):
+def findFaceDivide(image, width, height, divider, onlyHorizontal, onlyVertical, file):
     global skip
     global totalNumberOfFaces
 
@@ -95,6 +95,8 @@ def findFaceDivide(image, width, height, divider, onlyHorizontal, onlyVertical):
         # processed_image.show()
         processed_images.append(processed_image)
 
+    print(f"Found {facesInImage} face(s) in {str(file)}")
+    
     # Create a new image with the same size as the original large image
     new_image = Image.new('RGB', (width, height))
 
@@ -125,7 +127,7 @@ def findFaceDivide(image, width, height, divider, onlyHorizontal, onlyVertical):
     # cv2.imwrite("dilated.jpg", dilated)
     image = dilated
 
-    image = Image.fromarray(image)
+    image = Image.fromarray(image) 
 
     return image
 
@@ -163,12 +165,11 @@ def generateMasks(path, divider, howSplit, saveMask, pathToSave):
         width, height = image.size
         try:
             skip = 0
-            mask = findFaceDivide(image, width, height, divider, onlyHorizontal, onlyVertical)
+            mask = findFaceDivide(image, width, height, divider, onlyHorizontal, onlyVertical, file)
             if skip == 1:
                 state.skipped = True
                 continue
             if saveMask == True:
-                print(f"Image {fileNumber} done.")
                 suffix = '_mask'
                 if pathToSave != "":
                     images.save_image(mask, pathToSave, f"{suffix.join(os.path.splitext(file))}", p=p)
@@ -195,8 +196,8 @@ class Script(scripts.Script):
         gr.HTML("<p style=\"margin-bottom:0.75em;margin-top:0.75em;font-size:1.25em;color:red\">If you're in the \"Inpaint\" tab, set \"Mask source\" to \"Upload mask\"!</p>")
         with gr.Column():
             gr.HTML("<p style=\"margin-top:0.75em;font-size:1.25em\">Overrides:</p>")
-            overridePadding = gr.Checkbox(value=True, label="""Override "Only masked padding, pixels" to 10 (low values usually give better results)""") 
-            overrideDenoising = gr.Checkbox(value=True, label="""Override "Denoising strength" to 0.58 (values between 0.50-0.60 usually give great results)""")
+            overrideDenoising = gr.Checkbox(value=True, label="""Override "Denoising strength" to 0.5 (values between 0.4-0.6 usually give great results)""")
+            overrideMaskBlur = gr.Checkbox(value=True, label="""Override "Mask blur" (it will automatically adjust based on the image size)""")
         with gr.Column():
             gr.HTML("<p style=\"margin-top:0.75em;font-size:1.25em\"><strong>Step 1:</strong> Images:</p>")
             gr.HTML("<p>(path to a folder containing images.)</p>")
@@ -220,16 +221,11 @@ class Script(scripts.Script):
 
         saveMask.change(switch, saveMask, pathToSave)
 
-        return [overridePadding, overrideDenoising, path, divider, howSplit, testMask, saveMask, pathToSave]
+        return [overrideDenoising, overrideMaskBlur, path, divider, howSplit, testMask, saveMask, pathToSave]
 
-    def run(self, p, overridePadding, overrideDenoising, path, divider, howSplit, testMask, saveMask, pathToSave):
+    def run(self, p, overrideDenoising, overrideMaskBlur, path, divider, howSplit, testMask, saveMask, pathToSave):
         global skip
         global totalNumberOfFaces
-
-        if overridePadding == True:
-            p.inpaint_full_res_padding = 10
-        if overrideDenoising == True:
-            p.denoising_strength = 0.58
 
         if howSplit == "Horizontal only ▤":
             onlyHorizontal = True
@@ -265,10 +261,14 @@ class Script(scripts.Script):
             image = Image.open(imgPath)
             width, height = image.size
             p.init_images = [image]
+            if overrideDenoising == True:
+                p.denoising_strength = 0.5
+            if overrideMaskBlur == True:
+                p.mask_blur = int(math.ceil(0.01*height))
 
             try:
                 skip = 0
-                mask = findFaceDivide(image, width, height, divider, onlyHorizontal, onlyVertical)
+                mask = findFaceDivide(image, width, height, divider, onlyHorizontal, onlyVertical, file)
                 if skip == 1:
                     state.skipped = True
                     continue
