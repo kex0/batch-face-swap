@@ -26,3 +26,12 @@ You can generate and save the masks without even engaging the stable diffusion i
 Tip:
 You can check how many faces do your current settings find before you start generating with the stable diffusion 
 by just clicking the `Generate masks` button at the very bottom.
+
+## Example
+![example](https://user-images.githubusercontent.com/46696708/211818536-7d3bd06e-f6b1-40e9-854e-9cb44be3b2f8.png)
+
+```ShellSession
+detailed closeup photo of Emma Watson, 35mm, dslr
+Negative prompt: (painting:1.3), (concept art:1.2), artstation, sketch, illustration, drawing, blender, octane, 3d, render, blur, smooth, low-res, grain, cartoon, watermark, text, out of focus
+Steps: 50, Sampler: Euler a, CFG scale: 7, Seed: 4052732944, Size: 512x512, Model hash: a9263745, Batch size: 8, Batch pos: 1, Denoising strength: 0.5, Mask blur: 4
+```
