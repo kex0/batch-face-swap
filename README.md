@@ -9,7 +9,7 @@ Alternatively, install from the extensions tab with url `https://github.com/kex0
 2. Start or reload SD web UI.
 
 ## Guide
-1. Open `img2img` tab and make sure you're in the `Inpaint upload` sub-tab.
+1. Open `img2img` tab.
 2. Select `Batch Face Swap` script.
 3. Paste a path of the folder containing your images in the `Images directory` textbox.
 4. (Optional) It may sometimes fail to find a face if the face is very small in comparison to the size of the image.
@@ -26,7 +26,7 @@ Tip:
 You can check how many faces do your current settings find before you start generating with the stable diffusion 
 by just clicking the `Generate masks` button at the very bottom.
 
-![chrome_vQzs12Ewj6](https://user-images.githubusercontent.com/46696708/211950350-6564edad-6879-4596-8457-eb5ceb055a70.png)
+![chrome_DumtcxBgNf](https://user-images.githubusercontent.com/46696708/212193805-20c2de55-9b26-4d7c-9d78-d9c98cebae05.png)
 
 ## Example
 ![example](https://user-images.githubusercontent.com/46696708/211818536-7d3bd06e-f6b1-40e9-854e-9cb44be3b2f8.png)
