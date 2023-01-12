@@ -3,7 +3,6 @@ import gradio as gr
 import os
 
 from modules import images
-from modules.ui import plaintext_to_html
 from modules.processing import process_images, Processed, StableDiffusionProcessing
 from modules.shared import opts, cmd_opts, state
 
@@ -197,7 +196,7 @@ class Script(scripts.Script):
         def switch(saveMask: bool):
             return gr.Textbox.update(visible=bool(saveMask))
 
-        gr.HTML("<p style=\"margin-bottom:0.75em;margin-top:0.75em;font-size:1.25em;color:red\">If you're in the \"Inpaint\" tab, set \"Mask source\" to \"Upload mask\"!</p>")
+        gr.HTML("<p style=\"margin-bottom:0.75em;margin-top:0.75em;font-size:1.25em;color:red\">Make sure you're in the \"Inpaint upload\" tab!</p>")
         with gr.Column():
             gr.HTML("<p style=\"margin-top:0.75em;font-size:1.25em\">Overrides:</p>")
             overrideDenoising = gr.Checkbox(value=True, label="""Override "Denoising strength" to 0.5 (values between 0.4-0.6 usually give great results)""")
