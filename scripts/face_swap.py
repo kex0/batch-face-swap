@@ -100,10 +100,16 @@ def findFaceDivide(image, width, height, divider, onlyHorizontal, onlyVertical, 
     new_image = Image.new('RGB', (width, height))
 
     # Paste the processed small images into the new image
-    for i, processed_image in enumerate(processed_images):
-        x = i % (divider) * small_width
-        y = i // (divider) * small_height
-        new_image.paste(processed_image, (x, y))
+    if onlyHorizontal == True:
+        for i, processed_image in enumerate(processed_images):
+            x = i // (divider) * small_width
+            y = i % (divider) * small_height
+            new_image.paste(processed_image, (x, y))
+    else:
+        for i, processed_image in enumerate(processed_images):
+            x = i % (divider) * small_width
+            y = i // (divider) * small_height
+            new_image.paste(processed_image, (x, y))
 
     image = cv2.cvtColor(np.array(new_image), cv2.COLOR_RGB2BGR)
     imageOriginal[:] = (0, 0, 0)
