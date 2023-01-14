@@ -202,7 +202,7 @@ class Script(scripts.Script):
         def switch(saveMask: bool):
             return gr.Textbox.update(visible=bool(saveMask))
 
-        gr.HTML("<p style=\"margin-bottom:0.75em;margin-top:0.75em;font-size:1.5em;color:green\"><strong>Batch Face Swap</strong></p>")
+        gr.HTML("<p style=\"margin-bottom:0.75em;margin-top:0.75em;font-size:1.5em;color:red\">Make sure you're in the \"Inpaint upload\" tab!</p>")
         with gr.Column():
             gr.HTML("<p style=\"margin-top:0.75em;font-size:1.25em\">Overrides:</p>")
             overrideDenoising = gr.Checkbox(value=True, label="""Override "Denoising strength" to 0.5 (values between 0.4-0.6 usually give great results)""")
