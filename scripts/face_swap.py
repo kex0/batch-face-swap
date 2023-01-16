@@ -2,15 +2,28 @@ import modules.scripts as scripts
 import gradio as gr
 import os
 
-from modules import images
-from modules.processing import process_images, Processed, StableDiffusionProcessing
+from modules import images, masking
+from modules.processing import process_images, Processed, StableDiffusionProcessingImg2Img, StableDiffusionProcessing
 from modules.shared import opts, cmd_opts, state
 
 import cv2
 import mediapipe as mp
 import numpy as np
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, UnidentifiedImageError, ImageOps
 import math
+
+def apply_overlay(image, paste_loc, overlay):
+    if paste_loc is not None:
+        x, y, w, h = paste_loc
+        base_image = Image.new('RGBA', (overlay.width, overlay.height))
+        image = images.resize_image(1, image, w, h)
+        base_image.paste(image, (x, y))
+        image = base_image
+
+    image = image.convert('RGBA')
+    image.alpha_composite(overlay)
+
+    return image
 
 def findBiggestBlob(inputImage):
     # Store a copy of the input image:
@@ -169,7 +182,7 @@ def findFaceDivide(image, width, height, divider, onlyHorizontal, onlyVertical, 
     return masks, totalNumberOfFaces, skip 
 
 def generateMasks(path, divider, howSplit, saveMask, pathToSave):
-    p = StableDiffusionProcessing
+    p = StableDiffusionProcessingImg2Img(StableDiffusionProcessing)
     if howSplit == "Horizontal only ▤":
         onlyHorizontal = True
         onlyVertical = False
@@ -211,12 +224,12 @@ def generateMasks(path, divider, howSplit, saveMask, pathToSave):
                 if pathToSave != "":
                     for i, mask in enumerate(masks):
                         mask = Image.fromarray(mask)
-                        images.save_image(mask, pathToSave, f"{str(i+1).join(os.path.splitext(file))}", p=p, suffix="_mask")
+                        images.save_image(mask, pathToSave, "", p.seed, p.prompt, opts.samples_format, p=p, suffix=suffix)
                     
                 elif pathToSave == "":
                     for i, mask in enumerate(masks):
                         mask = Image.fromarray(mask)
-                        images.save_image(mask, opts.outdir_img2img_samples, f"{str(i+1).join(os.path.splitext(file))}", p=p, suffix="_mask")
+                        images.save_image(mask, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, p=p, suffix=suffix)
 
         except cv2.error as e:
             print(e)
@@ -249,14 +262,16 @@ class Script(scripts.Script):
             path = gr.Textbox(label="Images directory",placeholder=r"C:\Users\dude\Desktop\images")
         with gr.Column():
             gr.HTML("<p style=\"margin-top:0.75em;font-size:1.25em\"><strong>Step 2:</strong> Image splitter:</p>")
-            htmlTip2 = gr.HTML("<p>This divides image to smaller images and tries to find a face in the individual smaller images.</p><p>Useful when faces are small in relation to the size of the whole picture.</p><p>(may result in mask that only covers a part of a face if the division goes right through the face)</p>",visible=False)
+            htmlTip2 = gr.HTML("<p>This divides image to smaller images and tries to find a face in the individual smaller images.</p><p>Useful when faces are small in relation to the size of the whole picture and not being detected.</p><p>(may result in mask that only covers a part of a face or no detection if the division goes right through the face)</p>",visible=False)
             divider = gr.Slider(minimum=1, maximum=5, step=1, value=1, label="How many times to divide image")
             howSplit = gr.Radio(["Horizontal only ▤", "Vertical only ▥", "Both ▦"], value = "Both ▦", label = "How to divide")
         with gr.Column():
             gr.HTML("<p style=\"margin-top:0.75em;font-size:1.25em\">Other:</p>")
-            htmlTip3 = gr.HTML("<p>Simple utility to see how many faces do your current settings detect without generating SD image.</p><p>You can also save generated masks to disk. (if you leave path empty, it will save the masks to your default webui outputs directory)</p>",visible=False)
+            htmlTip3 = gr.HTML("<p>Press 'Generate masks' button to see how many faces do your current settings detect without generating SD image.</p><p>You can also save generated masks to disk. (if you leave path empty, it will save the masks to your default webui outputs directory)</p><p>Activate 'View all results' checkbox to see results in the WebUI at the end (not recommended when processing a large number of images)</p>",visible=False)
             showTips = gr.Checkbox(value=False, label="Show tips")
-            saveMask = gr.Checkbox(value=False, label="Save masks to disk") 
+            viewResults = gr.Checkbox(value=False, label="View all results")
+        with gr.Column():
+            saveMask = gr.Checkbox(value=False, label="Save masks to disk")  
             pathToSave = gr.Textbox(label="Mask save directory (OPTIONAL)",placeholder=r"C:\Users\dude\Desktop\masks (OPTIONAL)",visible=False)
             testMask = gr.Button(value="Generate masks",variant="primary")
             testMaskOut = gr.HTML(value="",visible=False)
@@ -270,9 +285,9 @@ class Script(scripts.Script):
 
 
 
-        return [overrideDenoising, overrideMaskBlur, path, divider, howSplit, testMask, saveMask, pathToSave]
+        return [overrideDenoising, overrideMaskBlur, path, divider, howSplit, testMask, saveMask, pathToSave, viewResults]
 
-    def run(self, p, overrideDenoising, overrideMaskBlur, path, divider, howSplit, testMask, saveMask, pathToSave):
+    def run(self, p, overrideDenoising, overrideMaskBlur, path, divider, howSplit, testMask, saveMask, pathToSave, viewResults):
         if howSplit == "Horizontal only ▤":
             onlyHorizontal = True
             onlyVertical = False
@@ -283,7 +298,7 @@ class Script(scripts.Script):
             onlyHorizontal = False
             onlyVertical = False
 
-        history = []
+        finishedImages = []
         all_images = []
         totalNumberOfFaces = 0
         dirPath = path
@@ -291,7 +306,7 @@ class Script(scripts.Script):
         files = os.listdir(dirPath)
 
         print(f"\nWill process {len(files)} images, creating {p.n_iter * p.batch_size} new images for each.")
-        state.job_count = len(files) * p.n_iter * p.batch_size
+        state.job_count = len(files) * p.n_iter
 
         for i, file in enumerate(files):
             state.job = f"{i+1} out of {len(files)}"
@@ -319,34 +334,72 @@ class Script(scripts.Script):
                 if skip == 1:
                     state.skipped = True
                     continue
-                p.init_images = [image]
+                
                 if len(masks) == 1:
+                    if not viewResults:
+                        finishedImages = []
+
                     mask = Image.fromarray(masks[0])
+
+                    p.init_images = [image]
                     p.image_mask = mask
+
                     proc = process_images(p)
-                    for i in range(p.batch_size):
-                        history.append(proc.images[i])
+
+                    for n in range(p.batch_size):
+                        finishedImages.append(proc.images[n])
                 else:
-                    originalBatchSize = p.batch_size
-                    for i in range(originalBatchSize):
-                        for j, mask in enumerate(masks):
-                            mask = Image.fromarray(mask)
-                            p.image_mask = mask
-                            p.batch_size = 1
-                            p.do_not_save_samples = True
-                            if j == len(masks) - 1:
-                                p.do_not_save_samples = False
-                            proc = process_images(p)
-                            p.init_images = [proc.images[0]]
-                        history.append(proc.images[0])
-                        p.batch_size = originalBatchSize
+                    if not viewResults:
+                        finishedImages = []
+
+                    generatedImages = []
+                    paste_to = []
+                    imageOriginal = image
+                    overlay_image = image
+                    p.do_not_save_samples = True
+
+                    for n, mask in enumerate(masks):
+                        mask = Image.fromarray(masks[n])
+
+                        image_masked = Image.new('RGBa', (image.width, image.height))
+                        image_masked.paste(overlay_image.convert("RGBA").convert("RGBa"), mask=ImageOps.invert(mask.convert('L')))
+
+                        overlay_image = image_masked.convert('RGBA')
+
+                        crop_region = masking.get_crop_region(np.array(mask), p.inpaint_full_res_padding)
+                        crop_region = masking.expand_crop_region(crop_region, p.width, p.height, mask.width, mask.height)
+                        x1, y1, x2, y2 = crop_region
+                        paste_to.append((x1, y1, x2-x1, y2-y1))
+
+                        mask = mask.crop(crop_region)
+                        image_mask = images.resize_image(2, mask, p.width, p.height)
+
+                        
+                        image = image.crop(crop_region)
+                        image = images.resize_image(2, image, p.width, p.height)
+
+                        p.init_images = [image]
+                        p.image_mask = image_mask
+                        proc = process_images(p)
+                        generatedImages.append(proc.images)
+
+                        image = imageOriginal
+
+                    for j in range(p.batch_size):
+                        image = overlay_image
+                        for k in range(len(generatedImages)):
+                            image = apply_overlay(generatedImages[k][j], paste_to[k], image)
+                        images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, p=p)
+                        finishedImages.append(image)
+
+                    p.do_not_save_samples = False
 
             except cv2.error as e:
                 print(e)
 
         print(f"Found {totalNumberOfFaces} faces in {len(files)} images.") 
 
-        all_images += history   
+        all_images += finishedImages   
         proc = Processed(p, all_images)
 
         return proc
