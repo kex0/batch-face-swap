@@ -320,19 +320,26 @@ class Script(scripts.Script):
                     state.skipped = True
                     continue
                 p.init_images = [image]
-                originalBatchSize = p.batch_size
-                for i in range(originalBatchSize):
-                    for j, mask in enumerate(masks):
-                        mask = Image.fromarray(mask)
-                        p.image_mask = mask
-                        p.batch_size = 1
-                        p.do_not_save_samples = True
-                        if j == len(masks) - 1:
-                            p.do_not_save_samples = False
-                        proc = process_images(p)
-                        p.init_images = [proc.images[0]]
-                    history.append(proc.images[0])
-                    p.batch_size = originalBatchSize
+                if len(masks) == 1:
+                    mask = Image.fromarray(masks[0])
+                    p.image_mask = mask
+                    proc = process_images(p)
+                    for i in range(p.batch_size):
+                        history.append(proc.images[i])
+                else:
+                    originalBatchSize = p.batch_size
+                    for i in range(originalBatchSize):
+                        for j, mask in enumerate(masks):
+                            mask = Image.fromarray(mask)
+                            p.image_mask = mask
+                            p.batch_size = 1
+                            p.do_not_save_samples = True
+                            if j == len(masks) - 1:
+                                p.do_not_save_samples = False
+                            proc = process_images(p)
+                            p.init_images = [proc.images[0]]
+                        history.append(proc.images[0])
+                        p.batch_size = originalBatchSize
 
             except cv2.error as e:
                 print(e)
