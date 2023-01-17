@@ -13,7 +13,7 @@ Alternatively, install from the extensions tab with url `https://github.com/kex0
 2. Select `Batch Face Swap` script.
 3. Paste a path of the folder containing your images in the `Images directory` textbox.
 4. (Optional) It may sometimes fail to find a face if the face is very small in comparison to the size of the image.
-So, you can tell it to split the image and look at the smaller portions of the image by using the `How many times to divide image` slider.
+So, you can tell it to split the image and look at the smaller portions of the image by using the `How many images to divide into` slider.
 (don't worry it will stitch the image back together)
 5. Click `Generate`
 
@@ -26,7 +26,7 @@ Tip:
 You can check how many faces do your current settings find before you start generating with the stable diffusion 
 by just clicking the `Generate masks` button at the very bottom.
 
-![chrome_DumtcxBgNf](https://user-images.githubusercontent.com/46696708/212193805-20c2de55-9b26-4d7c-9d78-d9c98cebae05.png)
+![chrome_blF0pro5Pf](https://user-images.githubusercontent.com/46696708/212803134-88b7b57f-aa01-4fd2-ac14-d71ab173476b.png)
 
 ## Example
 ![example](https://user-images.githubusercontent.com/46696708/211818536-7d3bd06e-f6b1-40e9-854e-9cb44be3b2f8.png)
