@@ -181,7 +181,7 @@ def findFaceDivide(image, width, height, divider, onlyHorizontal, onlyVertical, 
 
     return masks, totalNumberOfFaces, skip 
 
-def generateMasks(path, divider, howSplit, saveMask, pathToSave):
+def generateMasks(path, searchSubdir, divider, howSplit, saveMask, pathToSave):
     p = StableDiffusionProcessingImg2Img(StableDiffusionProcessing)
     if howSplit == "Horizontal only ▤":
         onlyHorizontal = True
@@ -193,19 +193,29 @@ def generateMasks(path, divider, howSplit, saveMask, pathToSave):
         onlyHorizontal = False
         onlyVertical = False
 
-    dirPath = path
     divider = int(divider)
-    files = os.listdir(dirPath)
     totalNumberOfFaces = 0
+    allFiles = []
 
-    for i, file in enumerate(files):
-        state.job = f"{i+1} out of {len(files)}"
+    if searchSubdir:
+        for root, _, files in os.walk(os.path.abspath(path)):
+            for file in files:
+                if file.endswith(('.png', '.jpg', '.jpeg', '.PNG', '.JPG', '.JPEG')):
+                    allFiles.append(os.path.join(root, file))
+
+    else:
+        allFiles = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
+
+    print(allFiles)
+
+    for i, file in enumerate(allFiles):
+        state.job = f"{i+1} out of {len(allFiles)}"
         if state.skipped:
             state.skipped = False
         if state.interrupted:
             state.interrupted = False
 
-        imgPath = os.path.join(dirPath, file)
+        imgPath = file
         try:
             image = Image.open(imgPath)
             width, height = image.size
@@ -234,8 +244,8 @@ def generateMasks(path, divider, howSplit, saveMask, pathToSave):
         except cv2.error as e:
             print(e)
 
-    print(f"Found {totalNumberOfFaces} faces in {len(files)} images.") 
-    return gr.HTML.update(value=f"<p style=\"font-size:1.25em\">Found {totalNumberOfFaces} faces in {len(files)} images.</p>",visible=True)
+    print(f"Found {totalNumberOfFaces} faces in {len(allFiles)} images.") 
+    return gr.HTML.update(value=f"<p style=\"font-size:1.25em\">Found {totalNumberOfFaces} faces in {len(allFiles)} images.</p>",visible=True)
 
 class Script(scripts.Script):  
     def title(self):
@@ -246,15 +256,15 @@ class Script(scripts.Script):
 
     def ui(self, is_img2img):
         def switchExample(howSplit: str, divider: int, path: str):
-            if path != "":
-                files = os.listdir(path)
+            files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
+            if path != "" and len(files) > 0:
                 imgPath = os.path.join(path, files[0])
                 image = Image.open(imgPath)
                 maxsize = (1000, 500)
                 image.thumbnail(maxsize,Image.ANTIALIAS)
 
             if "Both" in howSplit:
-                if path == "":
+                if len(files) == 0:
                     image = Image.open("./extensions/batch-face-swap/images/exampleB.jpg")
                 width, height = image.size
                 image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
@@ -275,7 +285,7 @@ class Script(scripts.Script):
                         image = cv2.line(image, start_point, end_point, color, thickness)
 
             elif "Vertical" in howSplit:
-                if path == "":
+                if len(files) == 0:
                     image = Image.open("./extensions/batch-face-swap/images/exampleV.jpg")
                 width, height = image.size
                 image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
@@ -289,7 +299,7 @@ class Script(scripts.Script):
                         image = cv2.line(image, start_point, end_point, color, thickness)
 
             else:
-                if path == "":
+                if len(files) == 0:
                     image = Image.open("./extensions/batch-face-swap/images/exampleH.jpg")
                 width, height = image.size
                 image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
@@ -321,6 +331,7 @@ class Script(scripts.Script):
             gr.HTML("<p style=\"margin-top:0.75em;font-size:1.25em\"><strong>Step 1:</strong> Images:</p>")
             htmlTip1 = gr.HTML("<p>Path to a folder containing images.</p>",visible=False)
             path = gr.Textbox(label="Images directory",placeholder=r"C:\Users\dude\Desktop\images")
+            searchSubdir = gr.Checkbox(value=False, label="Search for images in subdirectories")
         with gr.Column():
             gr.HTML("<p style=\"margin-top:0.75em;font-size:1.25em\"><strong>Step 2:</strong> Image splitter:</p>")
             htmlTip2 = gr.HTML("<p>This divides image to smaller images and tries to find a face in the individual smaller images.</p><p>Useful when faces are small in relation to the size of the whole picture and not being detected.</p><p>(may result in mask that only covers a part of a face or no detection if the division goes right through the face)</p>",visible=False)
@@ -338,7 +349,7 @@ class Script(scripts.Script):
             pathToSave = gr.Textbox(label="Mask save directory (OPTIONAL)",placeholder=r"C:\Users\dude\Desktop\masks (OPTIONAL)",visible=False)
             testMask = gr.Button(value="Generate masks",variant="primary")
             testMaskOut = gr.HTML(value="",visible=False)
-            testMask.click(fn=generateMasks,inputs=[path, divider, howSplit, saveMask, pathToSave],outputs=[testMaskOut])
+            testMask.click(fn=generateMasks,inputs=[path, searchSubdir, divider, howSplit, saveMask, pathToSave],outputs=[testMaskOut])
 
         path.change(fn=None, _js="gradioApp().getElementById('mode_img2img').querySelectorAll('button')[4].click()", inputs=None, outputs=None)
         saveMask.change(switchTextbox, saveMask, pathToSave)
@@ -352,9 +363,9 @@ class Script(scripts.Script):
 
 
 
-        return [overrideDenoising, overrideMaskBlur, path, divider, howSplit, testMask, saveMask, pathToSave, viewResults]
+        return [overrideDenoising, overrideMaskBlur, path, searchSubdir, divider, howSplit, testMask, saveMask, pathToSave, viewResults]
 
-    def run(self, p, overrideDenoising, overrideMaskBlur, path, divider, howSplit, testMask, saveMask, pathToSave, viewResults):
+    def run(self, p, overrideDenoising, overrideMaskBlur, path, searchSubdir, divider, howSplit, testMask, saveMask, pathToSave, viewResults):
         if howSplit == "Horizontal only ▤":
             onlyHorizontal = True
             onlyVertical = False
@@ -368,22 +379,31 @@ class Script(scripts.Script):
         comments = {}
         finishedImages = []
         all_images = []
+        allFiles = []
         totalNumberOfFaces = 0
-        dirPath = path
         divider = int(divider)
-        files = os.listdir(dirPath)
 
-        print(f"\nWill process {len(files)} images, creating {p.n_iter * p.batch_size} new images for each.")
-        state.job_count = len(files) * p.n_iter
+        if searchSubdir:
+            for root, _, files in os.walk(os.path.abspath(path)):
+                for file in files:
+                    if file.endswith(('.png', '.jpg', '.jpeg', '.PNG', '.JPG', '.JPEG')):
+                        allFiles.append(os.path.join(root, file))
+    
+        else:
+            allFiles = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
 
-        for i, file in enumerate(files):
-            state.job = f"{i+1} out of {len(files)}"
+
+        print(f"\nWill process {len(allFiles)} images, creating {p.n_iter * p.batch_size} new images for each.")
+        state.job_count = len(allFiles) * p.n_iter
+
+        for i, file in enumerate(allFiles):
+            state.job = f"{i+1} out of {len(allFiles)}"
             if state.skipped:
                 state.skipped = False
             if state.interrupted:
                 break
 
-            imgPath = os.path.join(dirPath, file)
+            imgPath = file
             try:
                 image = Image.open(imgPath)
                 width, height = image.size
@@ -468,7 +488,7 @@ class Script(scripts.Script):
             except cv2.error as e:
                 print(e)
 
-        print(f"Found {totalNumberOfFaces} faces in {len(files)} images.") 
+        print(f"Found {totalNumberOfFaces} faces in {len(allFiles)} images.") 
 
         all_images += finishedImages   
         proc = Processed(p, all_images)
