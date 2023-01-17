@@ -3,7 +3,7 @@ import gradio as gr
 import os
 
 from modules import images, masking
-from modules.processing import process_images, Processed, StableDiffusionProcessingImg2Img, StableDiffusionProcessing
+from modules.processing import process_images, create_infotext, Processed, StableDiffusionProcessingImg2Img, StableDiffusionProcessing
 from modules.shared import opts, cmd_opts, state
 
 import cv2
@@ -365,6 +365,7 @@ class Script(scripts.Script):
             onlyHorizontal = False
             onlyVertical = False
 
+        comments = {}
         finishedImages = []
         all_images = []
         totalNumberOfFaces = 0
@@ -454,9 +455,12 @@ class Script(scripts.Script):
 
                     for j in range(p.batch_size):
                         image = overlay_image
+                        def infotext(iteration=0, position_in_batch=0):
+                            return create_infotext(p, p.all_prompts, p.all_seeds, p.all_subseeds, comments, iteration, position_in_batch)
+                            
                         for k in range(len(generatedImages)):
                             image = apply_overlay(generatedImages[k][j], paste_to[k], image)
-                        images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, p=p)
+                        images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=infotext(), p=p)
                         finishedImages.append(image)
 
                     p.do_not_save_samples = False
