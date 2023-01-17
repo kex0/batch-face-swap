@@ -245,10 +245,63 @@ class Script(scripts.Script):
         return is_img2img
 
     def ui(self, is_img2img):
+        def switchExample(howSplit: str, divider: int, showTips: bool):
+            if "Both" in howSplit:
+                image = Image.open("./extensions/batch-face-swap/images/exampleB.jpg")
+                width, height = image.size
+                image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+                image = cv2.cvtColor(np.array(image), cv2.COLOR_BGR2RGB)
+                if divider > 1:
+                    for i in range(divider-1):
+                        start_point = (0, int((height/divider)*(i+1)))
+                        end_point = (int(width), int((height/divider)*(i+1)))
+                        color = (255, 0, 0)
+                        thickness = 4
+                        image = cv2.line(image, start_point, end_point, color, thickness)
+
+                    for i in range(divider-1):
+                        start_point = (int((width/divider)*(i+1)), 0)
+                        end_point = (int((width/divider)*(i+1)), int(height))
+                        color = (255, 0, 0)
+                        thickness = 4
+                        image = cv2.line(image, start_point, end_point, color, thickness)
+
+            elif "Vertical" in howSplit:
+                image = Image.open("./extensions/batch-face-swap/images/exampleV.jpg")
+                width, height = image.size
+                image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+                image = cv2.cvtColor(np.array(image), cv2.COLOR_BGR2RGB)
+                if divider > 1:
+                    for i in range(divider-1):
+                        start_point = (int((width/divider)*(i+1)), 0)
+                        end_point = (int((width/divider)*(i+1)), int(height))
+                        color = (255, 0, 0)
+                        thickness = 4
+                        image = cv2.line(image, start_point, end_point, color, thickness)
+
+            else:
+                image = Image.open("./extensions/batch-face-swap/images/exampleH.jpg")
+                width, height = image.size
+                image = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
+                image = cv2.cvtColor(np.array(image), cv2.COLOR_BGR2RGB)
+                if divider > 1:
+                    for i in range(divider-1):
+                        start_point = (0, int((height/divider)*(i+1)))
+                        end_point = (int(width), int((height/divider)*(i+1)))
+                        color = (255, 0, 0)
+                        thickness = 4
+                        image = cv2.line(image, start_point, end_point, color, thickness)
+
+            image = Image.fromarray(image)
+            update = gr.Image.update(value=image)
+            return update
+
         def switchTextbox(saveMask: bool):
             return gr.Textbox.update(visible=bool(saveMask))
         def switchHTML(showTips: bool):
             return gr.HTML.update(visible=bool(showTips))
+        def switchImage(showTips: bool):
+            return gr.Image.update(visible=bool(showTips))
 
 
         gr.HTML("<p style=\"margin-bottom:0.75em;margin-top:0.75em;font-size:1.5em;color:red\">Make sure you're in the \"Inpaint upload\" tab!</p>") 
@@ -263,8 +316,9 @@ class Script(scripts.Script):
         with gr.Column():
             gr.HTML("<p style=\"margin-top:0.75em;font-size:1.25em\"><strong>Step 2:</strong> Image splitter:</p>")
             htmlTip2 = gr.HTML("<p>This divides image to smaller images and tries to find a face in the individual smaller images.</p><p>Useful when faces are small in relation to the size of the whole picture and not being detected.</p><p>(may result in mask that only covers a part of a face or no detection if the division goes right through the face)</p>",visible=False)
-            divider = gr.Slider(minimum=1, maximum=5, step=1, value=1, label="How many times to divide image")
+            divider = gr.Slider(minimum=1, maximum=5, step=1, value=1, label="How many images to divide into")
             howSplit = gr.Radio(["Horizontal only ▤", "Vertical only ▥", "Both ▦"], value = "Both ▦", label = "How to divide")
+            exampleImage = gr.Image(value=Image.open("./extensions/batch-face-swap/images/exampleB.jpg"), label="Split visualizer", type="pil", visible=False).style(height=500)
         with gr.Column():
             gr.HTML("<p style=\"margin-top:0.75em;font-size:1.25em\">Other:</p>")
             htmlTip3 = gr.HTML("<p>Press 'Generate masks' button to see how many faces do your current settings detect without generating SD image.</p><p>You can also save generated masks to disk. (if you leave path empty, it will save the masks to your default webui outputs directory)</p><p>Activate 'View all results' checkbox to see results in the WebUI at the end (not recommended when processing a large number of images)</p>",visible=False)
@@ -282,6 +336,10 @@ class Script(scripts.Script):
         showTips.change(switchHTML, showTips, htmlTip1)
         showTips.change(switchHTML, showTips, htmlTip2)
         showTips.change(switchHTML, showTips, htmlTip3)
+        showTips.change(switchImage, showTips, exampleImage)
+
+        howSplit.change(switchExample, [howSplit, divider, showTips], exampleImage)
+        divider.change(switchExample, [howSplit, divider, showTips], exampleImage)
 
 
 
