@@ -204,9 +204,7 @@ def generateMasks(path, searchSubdir, divider, howSplit, saveMask, pathToSave):
                     allFiles.append(os.path.join(root, file))
 
     else:
-        allFiles = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
-
-    print(allFiles)
+        allFiles = [os.path.join(path, f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
 
     for i, file in enumerate(allFiles):
         state.job = f"{i+1} out of {len(allFiles)}"
@@ -390,7 +388,7 @@ class Script(scripts.Script):
                         allFiles.append(os.path.join(root, file))
     
         else:
-            allFiles = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
+            allFiles = [os.path.join(path, f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
 
 
         print(f"\nWill process {len(allFiles)} images, creating {p.n_iter * p.batch_size} new images for each.")
