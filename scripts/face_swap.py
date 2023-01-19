@@ -340,12 +340,13 @@ class Script(scripts.Script):
         with gr.Column():
             gr.HTML("<p style=\"margin-top:0.75em;font-size:1.25em\">Other:</p>")
             htmlTip3 = gr.HTML("<p>Press 'Generate masks' button to see how many faces do your current settings detect without generating SD image.</p><p>You can also save generated masks to disk. (if you leave path empty, it will save the masks to your default webui outputs directory)</p><p>Activate 'View all results' checkbox to see results in the WebUI at the end (not recommended when processing a large number of images)</p>",visible=False)
-            showTips = gr.Checkbox(value=False, label="Show tips")
+            saveNoFace = gr.Checkbox(value=True, label="Save image even if face was not found")
             viewResults = gr.Checkbox(value=False, label="View all results")
+            showTips = gr.Checkbox(value=False, label="Show tips")
         with gr.Column():
+            testMask = gr.Button(value="Generate masks",variant="primary")
             saveMask = gr.Checkbox(value=False, label="Save masks to disk")  
             pathToSave = gr.Textbox(label="Mask save directory (OPTIONAL)",placeholder=r"C:\Users\dude\Desktop\masks (OPTIONAL)",visible=False)
-            testMask = gr.Button(value="Generate masks",variant="primary")
             testMaskOut = gr.HTML(value="",visible=False)
             testMask.click(fn=generateMasks,inputs=[path, searchSubdir, divider, howSplit, saveMask, pathToSave],outputs=[testMaskOut])
 
@@ -361,9 +362,21 @@ class Script(scripts.Script):
 
 
 
-        return [overrideDenoising, overrideMaskBlur, path, searchSubdir, divider, howSplit, testMask, saveMask, pathToSave, viewResults]
+        return [overrideDenoising, overrideMaskBlur, path, searchSubdir, divider, howSplit, testMask, saveMask, pathToSave, viewResults, saveNoFace]
 
-    def run(self, p, overrideDenoising, overrideMaskBlur, path, searchSubdir, divider, howSplit, testMask, saveMask, pathToSave, viewResults):
+    def run(self, p, overrideDenoising, overrideMaskBlur, path, searchSubdir, divider, howSplit, testMask, saveMask, pathToSave, viewResults, saveNoFace):
+        
+        def infotext(iteration=0, position_in_batch=0):
+            if p.all_prompts == None:
+                p.all_prompts = [p.prompt]
+            if p.all_negative_prompts == None:
+                p.all_negative_prompts = [p.negative_prompt]
+            if p.all_seeds == None:
+                p.all_seeds = [p.seed]
+            if p.all_subseeds == None:
+                p.all_subseeds = [p.subseed]
+            return create_infotext(p, p.all_prompts, p.all_seeds, p.all_subseeds, comments, iteration, position_in_batch)
+        
         if howSplit == "Horizontal only ▤":
             onlyHorizontal = True
             onlyVertical = False
@@ -417,7 +430,13 @@ class Script(scripts.Script):
             try:
                 skip = 0
                 masks, totalNumberOfFaces, skip = findFaceDivide(image, width, height, divider, onlyHorizontal, onlyVertical, file, totalNumberOfFaces, skip)
-                if skip == 1:
+                
+                if skip == 1 and saveNoFace:
+                    images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=infotext(), p=p)
+                    finishedImages.append(image)
+                    state.skipped = True
+                    continue
+                elif skip == 1:
                     state.skipped = True
                     continue
                 
@@ -473,8 +492,6 @@ class Script(scripts.Script):
 
                     for j in range(p.batch_size):
                         image = overlay_image
-                        def infotext(iteration=0, position_in_batch=0):
-                            return create_infotext(p, p.all_prompts, p.all_seeds, p.all_subseeds, comments, iteration, position_in_batch)
                             
                         for k in range(len(generatedImages)):
                             image = apply_overlay(generatedImages[k][j], paste_to[k], image)
