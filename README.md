@@ -4,9 +4,15 @@
 ![example1](https://user-images.githubusercontent.com/46696708/211933260-7a27cc13-e33a-4bf1-911f-43e0aa97b96c.png)
 
 ## Installation
+### Automatic:
+1. In the WebUI go to `Extensions`.
+2. Open `Available` tab and click `Load from:` button.
+3. Find `Batch Face Swap` and click `Install`.
+4. Apply and restart UI
+### Manual:
 1. Use `git clone https://github.com/kex0/batch-face-swap.git` from your SD web UI `/extensions` folder. 
-Alternatively, install from the extensions tab with url `https://github.com/kex0/batch-face-swap`
-2. Start or reload SD web UI.
+2. Open `requirements_versions.txt` and add `mediapipe`.
+3. Start or reload SD web UI.
 
 ## Guide
 1. Open `img2img` tab.
@@ -19,14 +25,9 @@ So, you can tell it to split the image and look at the smaller portions of the i
 
 If you want to adjust `Denoising strength` or `Mask blur` you have to disable the override checkboxes.
 
-You can generate and save the masks without even engaging the stable diffusion image generation by checking the `Save masks to disk` checkbox and pressing 
-`Generate masks` button at the very bottom.
+For more information, activate the `Show tips` checkbox at the very bottom.
 
-Tip:
-You can check how many faces do your current settings find before you start generating with the stable diffusion 
-by just clicking the `Generate masks` button at the very bottom.
-
-![chrome_blF0pro5Pf](https://user-images.githubusercontent.com/46696708/212803134-88b7b57f-aa01-4fd2-ac14-d71ab173476b.png)
+![chrome_07qVSsUhsG](https://user-images.githubusercontent.com/46696708/213603380-daade963-e93d-40fa-9fa1-6bb1f68d5e44.png)
 
 ## Example
 ![example](https://user-images.githubusercontent.com/46696708/211818536-7d3bd06e-f6b1-40e9-854e-9cb44be3b2f8.png)
