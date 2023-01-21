@@ -239,13 +239,8 @@ def generateMasks(p, path, searchSubdir, divider, howSplit, saveMask, pathToSave
             elif state.interrupted:
                 break
 
-            imgPath = file
-            try:
-                image = Image.open(imgPath)
-                width, height = image.size
-            except UnidentifiedImageError:
-                print(f"{file} is not an image.")
-                continue
+            image = Image.open(file)
+            width, height = image.size
             
             if not onlyMask:
                 if overrideDenoising == True:
