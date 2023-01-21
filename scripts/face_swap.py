@@ -488,7 +488,7 @@ class Script(scripts.Script):
     def ui(self, is_img2img):
         def switchExample(howSplit: str, divider: int, path: str):
             try:
-                files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
+                files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f)) and f.endswith(('.png', '.jpg', '.jpeg', '.PNG', '.JPG', '.JPEG'))]
             except FileNotFoundError:
                 files = []
             if path != "" and len(files) > 0:
@@ -620,7 +620,6 @@ class Script(scripts.Script):
         with gr.Row():
             showTips = gr.Checkbox(value=False, label="Show tips")
 
-           
         path.change(fn=None, _js="gradioApp().getElementById('mode_img2img').querySelectorAll('button')[4].click()", inputs=None, outputs=None)
         onlyMask.change(switchSaveMaskInteractivity, onlyMask, saveMask)
         onlyMask.change(switchSaveMask, onlyMask, saveMask)
