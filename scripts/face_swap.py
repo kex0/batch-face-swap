@@ -215,6 +215,7 @@ def generateMasks(p, path, searchSubdir, divider, howSplit, saveMask, pathToSave
         onlyHorizontal = False
         onlyVertical = False
 
+# RUN IF PATH IS INSERTED
     if path != '':
         if searchSubdir:
             for root, _, files in os.walk(os.path.abspath(path)):
@@ -223,7 +224,7 @@ def generateMasks(p, path, searchSubdir, divider, howSplit, saveMask, pathToSave
                         allFiles.append(os.path.join(root, file))
     
         else:
-            allFiles = [os.path.join(path, f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f))]
+            allFiles = [os.path.join(path, f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f)) and f.endswith(('.png', '.jpg', '.jpeg', '.PNG', '.JPG', '.JPEG'))]
 
         if not onlyMask:
             print(f"\nWill process {len(allFiles)} images, creating {p.n_iter * p.batch_size} new images for each.")
@@ -351,7 +352,8 @@ def generateMasks(p, path, searchSubdir, divider, howSplit, saveMask, pathToSave
                 print(e)
 
         print(f"Found {totalNumberOfFaces} faces in {len(allFiles)} images.") 
-    
+
+# RUN IF PATH IS NOT INSERTED AND IMAGE IS   
     if path == '' and p.init_images[0] != None:
         print(f"\nWill process {len(p.init_images)} images, creating {p.n_iter * p.batch_size} new images for each.")
         state.job_count = len(p.init_images) * p.n_iter
