@@ -385,7 +385,7 @@ def generateMasks(p, path, searchSubdir, divider, howSplit, saveMask, pathToSave
                 p.mask_blur = int(math.ceil(0.01*height))
 
         skip = 0
-        masks, totalNumberOfFaces, skip = findFaceDivide(image, width, height, divider, onlyHorizontal, onlyVertical, file, totalNumberOfFaces, singleMaskPerImage, countFaces, skip)
+        masks, totalNumberOfFaces, skip = findFaceDivide(image, width, height, divider, onlyHorizontal, onlyVertical, None, totalNumberOfFaces, singleMaskPerImage, countFaces, skip)
         
         if onlyMask:
             suffix = '_mask'
