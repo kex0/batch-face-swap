@@ -3,7 +3,7 @@ import gradio as gr
 import os
 
 from modules import images, masking
-from modules.processing import process_images, create_infotext, Processed, StableDiffusionProcessingImg2Img, StableDiffusionProcessing
+from modules.processing import process_images, create_infotext, Processed
 from modules.shared import opts, cmd_opts, state
 
 import cv2
@@ -179,7 +179,7 @@ def findFaceDivide(image, width, height, divider, onlyHorizontal, onlyVertical, 
                 image = image - currentBiggest
 
                 whitePixels = cv2.countNonZero(image)
-                whitePixelThreshold = 0.005 * (widthOriginal * heightOriginal)
+                whitePixelThreshold = 0.0005 * (widthOriginal * heightOriginal)
                 if (whitePixels < whitePixelThreshold):
                     segmentFaces = False
             return masks, totalNumberOfFaces, skip
@@ -223,11 +223,11 @@ def generateMasks(p, path, searchSubdir, divider, howSplit, saveMask, pathToSave
         if searchSubdir:
             for root, _, files in os.walk(os.path.abspath(path)):
                 for file in files:
-                    if file.endswith(('.png', '.jpg', '.jpeg', '.PNG', '.JPG', '.JPEG')):
+                    if file.endswith(('.png', '.jpg', '.jpeg', '.bmp', '.PNG', '.JPG', '.JPEG', '.BMP')):
                         allFiles.append(os.path.join(root, file))
     
         else:
-            allFiles = [os.path.join(path, f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f)) and f.endswith(('.png', '.jpg', '.jpeg', '.PNG', '.JPG', '.JPEG'))]
+            allFiles = [os.path.join(path, f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f)) and f.endswith(('.png', '.jpg', '.jpeg', '.bmp', '.PNG', '.JPG', '.JPEG', '.BMP'))]
 
         if countFaces:
             print("\nCounting faces...")
@@ -488,7 +488,7 @@ class Script(scripts.Script):
     def ui(self, is_img2img):
         def switchExample(howSplit: str, divider: int, path: str):
             try:
-                files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f)) and f.endswith(('.png', '.jpg', '.jpeg', '.PNG', '.JPG', '.JPEG'))]
+                files = [f for f in os.listdir(path) if os.path.isfile(os.path.join(path, f)) and f.endswith(('.png', '.jpg', '.jpeg', '.bmp', '.PNG', '.JPG', '.JPEG', '.BMP'))]
             except FileNotFoundError:
                 files = []
             if path != "" and len(files) > 0:
