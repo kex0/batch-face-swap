@@ -27,7 +27,7 @@ If you want to adjust `Denoising strength` or `Mask blur` you have to disable th
 
 For more information, activate the `Show tips` checkbox at the very bottom.
 
-![chrome_eh8w3ibBbX](https://user-images.githubusercontent.com/46696708/213845961-474b5348-25b8-46a1-ac02-c4a8bc091df0.png)
+![chrome_BfZn7JEqVu](https://user-images.githubusercontent.com/46696708/213899772-36498c5f-d8ea-4b15-8b45-d1d11576654c.png)
 
 ## Example
 ![example](https://user-images.githubusercontent.com/46696708/211818536-7d3bd06e-f6b1-40e9-854e-9cb44be3b2f8.png)
