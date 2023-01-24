@@ -192,7 +192,15 @@ def faceSwap(p, masks, image, finishedImages, invertMask, info):
                 
             for k in range(len(generatedImages)):
                 image = apply_overlay(generatedImages[k][j], paste_to[k], image)
-            images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p)
+
+            if opts.samples_format == "png":
+                images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p)
+            elif image.mode != 'RGB':
+                image = image.convert('RGB')
+                images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p)
+            else:
+                images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p)
+
             finishedImages.append(image)
 
         p.do_not_save_samples = False
@@ -273,7 +281,13 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
                             mask = ImageOps.invert(mask)
                         finishedImages.append(mask)
                         if saveMask == True:
-                            images.save_image(mask, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
+                            if opts.samples_format == "png":
+                                images.save_image(mask, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
+                            elif mask.mode != 'RGB':
+                                mask = mask.convert('RGB')
+                                images.save_image(mask, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
+                            else:
+                                images.save_image(mask, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
                     
                 elif pathToSave == "":
                     for i, mask in enumerate(masks):
@@ -282,10 +296,23 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
                             mask = ImageOps.invert(mask)
                         finishedImages.append(mask)
                         if saveMask == True:
-                            images.save_image(mask, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
+                            if opts.samples_format == "png":
+                                images.save_image(mask, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
+                            elif mask.mode != 'RGB':
+                                mask = mask.convert('RGB')
+                                images.save_image(mask, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
+                            else:
+                                images.save_image(mask, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
 
             if skip == 1 and saveNoFace and not onlyMask:
-                images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p)
+                if opts.samples_format == "png":
+                    images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p)
+                elif image.mode != 'RGB':
+                    image = image.convert('RGB')
+                    images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p)
+                else:
+                    images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p)  
+                    
                 finishedImages.append(image)
                 state.skipped = True
                 continue
@@ -332,7 +359,13 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
                         mask = ImageOps.invert(mask)
                     finishedImages.append(mask)
                     if saveMask == True:
-                        images.save_image(mask, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
+                        if opts.samples_format == "png":
+                            images.save_image(mask, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
+                        elif mask.mode != 'RGB':
+                            mask = mask.convert('RGB')
+                            images.save_image(mask, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
+                        else:
+                            images.save_image(mask, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
                 
             elif pathToSave == "":
                 for i, mask in enumerate(masks):
@@ -341,10 +374,23 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
                         mask = ImageOps.invert(mask)
                     finishedImages.append(mask)
                     if saveMask == True:
-                        images.save_image(mask, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
+                        if opts.samples_format == "png":
+                            images.save_image(mask, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
+                        elif mask.mode != 'RGB':
+                            mask = mask.convert('RGB')
+                            images.save_image(mask, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
+                        else:
+                            images.save_image(mask, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
 
         if skip == 1 and saveNoFace and not onlyMask:
-            images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p)
+            if opts.samples_format == "png":
+                images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p)
+            elif image.mode != 'RGB':
+                image = image.convert('RGB')
+                images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p)
+            else:
+                images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p)
+                
             finishedImages.append(image)
             state.skipped = True
         
