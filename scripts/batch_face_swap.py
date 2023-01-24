@@ -106,14 +106,16 @@ def findFaces(image, width, height, divider, onlyHorizontal, onlyVertical, file,
     imageOriginal = cv2.threshold(imageOriginal,thresh,255,cv2.THRESH_BINARY)[1]
     binary_image = cv2.convertScaleAbs(imageOriginal)
 
-    # define kernel
-    kernel = np.ones((int(math.ceil(0.011*height)),int(math.ceil(0.011*height))),'uint8')
-    dilated = cv2.dilate(binary_image,kernel,iterations=1)
-    kernel = np.ones((int(math.ceil(0.0045*height)),int(math.ceil(0.0025*height))),'uint8')
-    dilated = cv2.dilate(dilated,kernel,iterations=1,anchor=(1, -1))
-    kernel = np.ones((int(math.ceil(0.014*height)),int(math.ceil(0.0025*height))),'uint8')
-    dilated = cv2.dilate(dilated,kernel,iterations=1,anchor=(-1, 1))
-    mask = dilated
+    try:
+        kernel = np.ones((int(math.ceil(0.011*height)),int(math.ceil(0.011*height))),'uint8')
+        dilated = cv2.dilate(binary_image,kernel,iterations=1)
+        kernel = np.ones((int(math.ceil(0.0045*height)),int(math.ceil(0.0025*height))),'uint8')
+        dilated = cv2.dilate(dilated,kernel,iterations=1,anchor=(1, -1))
+        kernel = np.ones((int(math.ceil(0.014*height)),int(math.ceil(0.0025*height))),'uint8')
+        dilated = cv2.dilate(dilated,kernel,iterations=1,anchor=(-1, 1))
+        mask = dilated
+    except cv2.error:
+        mask = dilated
 
     if maskSize != 0:
         mask = maskResize(mask, maskSize, height)
@@ -198,7 +200,7 @@ def faceSwap(p, masks, image, finishedImages, invertMask, info):
     return finishedImages
      
 
-def generateImages(p, path, searchSubdir, divider, howSplit, saveMask, pathToSave, onlyMask, saveNoFace, overrideDenoising, overrideMaskBlur, invertMask, singleMaskPerImage, countFaces, maskSize, info):
+def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMask, pathToSave, onlyMask, saveNoFace, overrideDenoising, overrideMaskBlur, invertMask, singleMaskPerImage, countFaces, maskSize, info):
     wasCountFaces = False
     finishedImages = []
     totalNumberOfFaces = 0
@@ -294,6 +296,9 @@ def generateImages(p, path, searchSubdir, divider, howSplit, saveMask, pathToSav
 
             if not onlyMask:
                 finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, info)
+
+            if not viewResults:
+                finishedImages = []
 
         if wasCountFaces == True:
             countFaces = True
@@ -589,7 +594,7 @@ class Script(scripts.Script):
         all_images = []
         divider = int(divider)
 
-        finishedImages = generateImages(p, path, searchSubdir, divider, howSplit, saveMask, pathToSave, onlyMask, saveNoFace, overrideDenoising, overrideMaskBlur, invertMask, singleMaskPerImage, countFaces, maskSize, info)
+        finishedImages = generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMask, pathToSave, onlyMask, saveNoFace, overrideDenoising, overrideMaskBlur, invertMask, singleMaskPerImage, countFaces, maskSize, info)
 
         if not viewResults:
             finishedImages = []
