@@ -430,7 +430,7 @@ class Script(scripts.Script):
                     maxsize = (1000, 500)
                     image.thumbnail(maxsize,Image.ANTIALIAS)
                 except UnidentifiedImageError:
-                    print(f"\nUnable to open {imgPath}, skipping")
+                    allFiles = []
 
             visualizationOpacity = (visualizationOpacity/100)*255
             color = "white"
