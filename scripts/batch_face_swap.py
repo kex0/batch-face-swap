@@ -16,7 +16,7 @@ from modules.shared import opts, cmd_opts, state
 
 import cv2
 import numpy as np
-from PIL import Image, ImageOps, ImageDraw
+from PIL import Image, ImageOps, ImageDraw, UnidentifiedImageError
 import math
 
 
@@ -235,7 +235,6 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
                 image = Image.open(file)
                 width, height = image.size
                 totalNumberOfFaces = findFaces(image, width, height, divider, onlyHorizontal, onlyVertical, file, totalNumberOfFaces, singleMaskPerImage, countFaces, maskSize, skip)
-
                     
         if not onlyMask and countFaces:
             print(f"\nWill process {len(allFiles)} images, found {totalNumberOfFaces} faces, generating {p.n_iter * p.batch_size} new images for each.")
@@ -259,9 +258,13 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
                 state.interrupted = False
             elif state.interrupted:
                 break
-
-            image = Image.open(file)
-            width, height = image.size
+            
+            try:
+                image = Image.open(file)
+                width, height = image.size
+            except UnidentifiedImageError:
+                print(f"\nUnable to open {file}, skipping")
+                continue
             
             if not onlyMask:
                 if overrideDenoising == True:
@@ -422,9 +425,12 @@ class Script(scripts.Script):
 
             if len(allFiles) > 0:
                 imgPath = allFiles[0]
-                image = Image.open(imgPath)
-                maxsize = (1000, 500)
-                image.thumbnail(maxsize,Image.ANTIALIAS)
+                try:
+                    image = Image.open(imgPath)
+                    maxsize = (1000, 500)
+                    image.thumbnail(maxsize,Image.ANTIALIAS)
+                except UnidentifiedImageError:
+                    print(f"\nUnable to open {imgPath}, skipping")
 
             visualizationOpacity = (visualizationOpacity/100)*255
             color = "white"
