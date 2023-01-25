@@ -138,7 +138,9 @@ def findFaces(image, width, height, divider, onlyHorizontal, onlyVertical, file,
 
     return masks, totalNumberOfFaces, skip
 
-def faceSwap(p, masks, image, finishedImages, invertMask, info):
+def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info):
+    p.do_not_save_samples = True
+
     if len(masks) == 1:
         mask = Image.fromarray(masks[0])
         if invertMask:
@@ -148,15 +150,32 @@ def faceSwap(p, masks, image, finishedImages, invertMask, info):
         p.image_mask = mask
 
         proc = process_images(p)
+        
+        if pathToSave != "":
+            for n in range(p.batch_size):
+                if opts.samples_format == "png":
+                    images.save_image(proc.images[n], pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(n+1) if forced_filename != None and p.batch_size > 1 else forced_filename)
+                elif image.mode != 'RGB':
+                    image = image.convert('RGB')
+                    images.save_image(proc.images[n], pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(n+1) if forced_filename != None and p.batch_size > 1 else forced_filename)
+                else:
+                    images.save_image(proc.images[n], pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(n+1) if forced_filename != None and p.batch_size > 1 else forced_filename)
+        else:
+            for n in range(p.batch_size):
+                if opts.samples_format == "png":
+                    images.save_image(proc.images[n], p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(n+1) if forced_filename != None and p.batch_size > 1 else forced_filename)
+                elif image.mode != 'RGB':
+                    image = image.convert('RGB')
+                    images.save_image(proc.images[n], p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(n+1) if forced_filename != None and p.batch_size > 1 else forced_filename)
+                else:
+                    images.save_image(proc.images[n], p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(n+1) if forced_filename != None and p.batch_size > 1 else forced_filename)
 
-        for n in range(p.batch_size):
             finishedImages.append(proc.images[n])
     else:
         generatedImages = []
         paste_to = []
         imageOriginal = image
         overlay_image = image
-        p.do_not_save_samples = True
 
         for n, mask in enumerate(masks):
             mask = Image.fromarray(masks[n])
@@ -194,12 +213,12 @@ def faceSwap(p, masks, image, finishedImages, invertMask, info):
                 image = apply_overlay(generatedImages[k][j], paste_to[k], image)
 
             if opts.samples_format == "png":
-                images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p)
+                images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and p.batch_size > 1 else forced_filename)
             elif image.mode != 'RGB':
                 image = image.convert('RGB')
-                images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p)
+                images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and p.batch_size > 1 else forced_filename)
             else:
-                images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p)
+                images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and p.batch_size > 1 else forced_filename)
 
             finishedImages.append(image)
 
@@ -208,7 +227,7 @@ def faceSwap(p, masks, image, finishedImages, invertMask, info):
     return finishedImages
      
 
-def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMask, pathToSave, onlyMask, saveNoFace, overrideDenoising, overrideMaskBlur, invertMask, singleMaskPerImage, countFaces, maskSize, info):
+def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMask, pathToSave, onlyMask, saveNoFace, overrideDenoising, overrideMaskBlur, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, info):
     wasCountFaces = False
     finishedImages = []
     totalNumberOfFaces = 0
@@ -244,6 +263,11 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
             state.job_count = len(allFiles) * p.n_iter
 
         for i, file in enumerate(allFiles):
+            if keepOriginalName:
+                forced_filename = os.path.splitext(os.path.basename(file))[0]
+            else:
+                forced_filename = None
+
             if countFaces:
                 state.job = f"{i+1} out of {totalNumberOfFaces}"
                 totalNumberOfFaces = 0
@@ -275,57 +299,71 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
             skip = 0
             masks, totalNumberOfFaces, skip = findFaces(image, width, height, divider, onlyHorizontal, onlyVertical, file, totalNumberOfFaces, singleMaskPerImage, countFaces, maskSize, skip)                   
         
+            # Only generate mask
             if onlyMask:
                 suffix = '_mask'
+
+                # If path to save mask was provided
                 if pathToSave != "":
                     for i, mask in enumerate(masks):
                         mask = Image.fromarray(mask)
+
+                        # Invert mask if needed
                         if invertMask:
                             mask = ImageOps.invert(mask)
                         finishedImages.append(mask)
+
+                        # Save mask
                         if saveMask == True:
                             if opts.samples_format == "png":
-                                images.save_image(mask, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
+                                images.save_image(mask, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
                             elif mask.mode != 'RGB':
                                 mask = mask.convert('RGB')
-                                images.save_image(mask, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
+                                images.save_image(mask, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
                             else:
-                                images.save_image(mask, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
-                    
+                                images.save_image(mask, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
+
+                # If path to save mask was NOT provided   
                 elif pathToSave == "":
                     for i, mask in enumerate(masks):
                         mask = Image.fromarray(mask)
+
+                        # Invert mask if needed
                         if invertMask:
                             mask = ImageOps.invert(mask)
                         finishedImages.append(mask)
+
+                        # Save mask
                         if saveMask == True:
                             if opts.samples_format == "png":
-                                images.save_image(mask, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
+                                images.save_image(mask, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
                             elif mask.mode != 'RGB':
                                 mask = mask.convert('RGB')
-                                images.save_image(mask, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
+                                images.save_image(mask, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
                             else:
-                                images.save_image(mask, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
+                                images.save_image(mask, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
 
+            # If face was not found but user wants to save images without face
             if skip == 1 and saveNoFace and not onlyMask:
                 if opts.samples_format == "png":
-                    images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p)
+                    images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename)
                 elif image.mode != 'RGB':
                     image = image.convert('RGB')
-                    images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p)
+                    images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename)
                 else:
-                    images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p)  
+                    images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename)  
                     
                 finishedImages.append(image)
                 state.skipped = True
                 continue
-            
+
+            # If face was not found, just skip
             if skip == 1:
                 state.skipped = True
                 continue
-
+            
             if not onlyMask:
-                finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, info)
+                finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info)
 
             if not viewResults:
                 finishedImages = []
@@ -341,6 +379,7 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
         state.job_count = len(p.init_images) * p.n_iter
         state.job = f"{1} out of {len(p.init_images)}"
 
+        forced_filename = None
         image = p.init_images[0]
         width, height = image.size
 
@@ -353,55 +392,69 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
         skip = 0
         masks, totalNumberOfFaces, skip = findFaces(image, width, height, divider, onlyHorizontal, onlyVertical, None, totalNumberOfFaces, singleMaskPerImage, countFaces, maskSize, skip)
         
+        # Only generate mask
         if onlyMask:
             suffix = '_mask'
+
+            # If path to save mask was provided
             if pathToSave != "":
                 for i, mask in enumerate(masks):
                     mask = Image.fromarray(mask)
+
+                    # Invert mask if needed
                     if invertMask:
                         mask = ImageOps.invert(mask)
                     finishedImages.append(mask)
+
+                    # Save mask
                     if saveMask == True:
                         if opts.samples_format == "png":
-                            images.save_image(mask, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
+                            images.save_image(mask, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
                         elif mask.mode != 'RGB':
                             mask = mask.convert('RGB')
-                            images.save_image(mask, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
+                            images.save_image(mask, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
                         else:
-                            images.save_image(mask, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
+                            images.save_image(mask, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
                 
+            # If path to save mask was NOT provided
             elif pathToSave == "":
                 for i, mask in enumerate(masks):
                     mask = Image.fromarray(mask)
+
+                    # Invert mask if needed
                     if invertMask:
                         mask = ImageOps.invert(mask)
                     finishedImages.append(mask)
+
+                    # Save mask
                     if saveMask == True:
                         if opts.samples_format == "png":
-                            images.save_image(mask, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
+                            images.save_image(mask, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
                         elif mask.mode != 'RGB':
                             mask = mask.convert('RGB')
-                            images.save_image(mask, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
+                            images.save_image(mask, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
                         else:
-                            images.save_image(mask, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, suffix=suffix)
+                            images.save_image(mask, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
 
+        # If face was not found but user wants to save images without face
         if skip == 1 and saveNoFace and not onlyMask:
             if opts.samples_format == "png":
-                images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p)
+                images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename)
             elif image.mode != 'RGB':
                 image = image.convert('RGB')
-                images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p)
+                images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename)
             else:
-                images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p)
+                images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename)
                 
             finishedImages.append(image)
             state.skipped = True
         
+        # If face was not found, just skip
         if skip == 1:
             state.skipped = True
         
         if not onlyMask:
-            finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, info)
+            finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info)
 
         print(f"Found {totalNumberOfFaces} faces in {len(p.init_images)} images.")
 
@@ -536,83 +589,80 @@ class Script(scripts.Script):
         def switchSaveMask(onlyMask: bool):
             if onlyMask == False:
                 return gr.Checkbox.update(value=bool(onlyMask))
-
-        def switchMaskPathVisibility(saveMask: bool, onlyMask: bool):
-            if onlyMask == False:
-                return gr.Row.update(visible=bool(onlyMask))
-            else:
-                return gr.Row.update(visible=bool(saveMask))
-
         def switchTipsVisibility(showTips: bool):
             return gr.HTML.update(visible=bool(showTips))
         def switchInvertMask(invertMask: bool):
             return gr.Checkbox.update(value=bool(invertMask))
 
 
-        gr.HTML("<p style=\"margin-bottom:0.75em;margin-top:0.75em;font-size:1.5em;color:red\">Make sure you're in the \"Inpaint upload\" tab!</p>") 
-        with gr.Row():
-            gr.HTML("<p style=\"margin-top:0.75em;font-size:1.25em\">Settings:</p>")
-            gr.HTML("<p style=\"margin-top:0.75em;font-size:1.25em\">Overrides:</p>")
+        with gr.Column(variant='panel'):
+            gr.HTML("<p style=\"margin-bottom:0.75em;margin-top:0.75em;font-size:1.5em;color:red\">Make sure you're in the \"Inpaint upload\" tab!</p>") 
+
         with gr.Column(variant='panel'):
             htmlTip1 = gr.HTML("<p>Activate the 'Masks only' checkbox to see how many faces do your current settings detect without generating SD image. (check console)</p><p>You can also save generated masks to disk. Only possible with 'Masks only' (if you leave path empty, it will save the masks to your default webui outputs directory)</p><p>'Single mask per image' is only recommended with 'Invert mask' or if you want to save one mask per image, not per face. If you activate it without inverting mask, and try to process an image with multiple faces, it will generate only one image for all faces, producing bad results.</p>",visible=False)
             with gr.Row():
                 # Settings
-                with gr.Column():
-                    with gr.Row():
-                        onlyMask = gr.Checkbox(value=False, label="Masks only", visible=True)
-                        saveMask = gr.Checkbox(value=False, label="Save masks to disk", interactive=False)
-                    with gr.Row(visible=False) as maskPathRow:     
-                        pathToSave = gr.Textbox(label="Mask save directory (OPTIONAL)",placeholder=r"C:\Users\dude\Desktop\masks (OPTIONAL)",visible=True)
-                    with gr.Row():
-                        invertMask = gr.Checkbox(value=False, label="Invert mask", visible=True)
-                        singleMaskPerImage = gr.Checkbox(value=False, label="Single mask per image", visible=True)
+                with gr.Column(variant='panel'):
+                    gr.HTML("<p style=\"margin-top:0.75em;font-size:1.25em\">Settings:</p>")
+                    with gr.Column():
+                        with gr.Row():
+                            onlyMask = gr.Checkbox(value=False, label="Masks only", visible=True)
+                            saveMask = gr.Checkbox(value=False, label="Save masks to disk", interactive=False)
+                        with gr.Row():
+                            invertMask = gr.Checkbox(value=False, label="Invert mask", visible=True)
+                            singleMaskPerImage = gr.Checkbox(value=False, label="Single mask per image", visible=True)
                 # Overrides
-                with gr.Column():        
+                with gr.Column(variant='panel'):
+                    gr.HTML("<p style=\"margin-top:0.75em;font-size:1.25em\">Overrides:</p>")       
                     with gr.Row():
                         overrideDenoising = gr.Checkbox(value=True, label="""Override "Denoising strength" to 0.5""")
                     with gr.Row():
                         overrideMaskBlur = gr.Checkbox(value=True, label="""Override "Mask blur" to automatic""")
 
         # Path to images
-        gr.HTML("<p style=\"margin-top:0.75em;margin-bottom:0.5em;font-size:1.5em\"><strong>Path to images:</strong></p>")
         with gr.Column(variant='panel'):
-            htmlTip2 = gr.HTML("<p>'Load from subdirectories' will include all images in all subdirectories.</p>",visible=False)
-            path = gr.Textbox(label="Images directory",placeholder=r"C:\Users\dude\Desktop\images")
-            searchSubdir = gr.Checkbox(value=False, label="Load from subdirectories")
+            gr.HTML("<p style=\"margin-top:0.75em;margin-bottom:0.5em;font-size:1.5em\"><strong>Path to images:</strong></p>")
+            with gr.Column(variant='panel'):
+                htmlTip2 = gr.HTML("<p>'Load from subdirectories' will include all images in all subdirectories.</p>",visible=False)
+                with gr.Row():
+                    path = gr.Textbox(label="Images directory",placeholder=r"C:\Users\dude\Desktop\images")
+                    pathToSave = gr.Textbox(label="Output directory (OPTIONAL)",placeholder=r"Leave empty to save to default directory")
+                searchSubdir = gr.Checkbox(value=False, label="Load from subdirectories")
+                keepOriginalName = gr.Checkbox(value=False, label="Keep original file name (OVERWRITES FILES WITH THE SAME NAME)")
 
         # Image splitter
-        gr.HTML("<p style=\"margin-top:0.75em;margin-bottom:0.5em;font-size:1.5em\"><strong>Image splitter:</strong></p>")
-        with gr.Column(variant='panel'): 
-            htmlTip3 = gr.HTML("<p>This divides image to smaller images and tries to find a face in the individual smaller images.</p><p>Useful when faces are small in relation to the size of the whole picture and are not being detected.</p><p>(may result in mask that only covers a part of a face or no detection if the division goes right through the face)</p><p>Open 'Split visualizer' to see how it works.</p>",visible=False)
-            with gr.Row():
-                divider = gr.Slider(minimum=1, maximum=5, step=1, value=1, label="How many images to divide into")
-                maskSize = gr.Slider(minimum=-10, maximum=10, step=1, value=0, label="Mask size")
-            howSplit = gr.Radio(["Horizontal only ▤", "Vertical only ▥", "Both ▦"], value = "Both ▦", label = "How to divide")
-            with gr.Accordion(label="Visualizer", open=False):  
-                exampleImage = gr.Image(value=Image.open("./extensions/batch-face-swap/images/exampleB.jpg"), label="Split visualizer", show_label=False, type="pil", visible=True).style(height=500)
-                with gr.Row(variant='compact'):
-                    with gr.Column(variant='compact'):
-                        gr.HTML("", visible=False)
-                    with gr.Column(variant='compact'):
-                        visualizationOpacity = gr.Slider(minimum=0, maximum=100, step=1, value=75, label="Opacity")
+        with gr.Column(variant='panel'):
+            gr.HTML("<p style=\"margin-top:0.75em;margin-bottom:0.5em;font-size:1.5em\"><strong>Image splitter:</strong></p>")
+            with gr.Column(variant='panel'): 
+                htmlTip3 = gr.HTML("<p>This divides image to smaller images and tries to find a face in the individual smaller images.</p><p>Useful when faces are small in relation to the size of the whole picture and are not being detected.</p><p>(may result in mask that only covers a part of a face or no detection if the division goes right through the face)</p><p>Open 'Split visualizer' to see how it works.</p>",visible=False)
+                with gr.Row():
+                    divider = gr.Slider(minimum=1, maximum=5, step=1, value=1, label="How many images to divide into")
+                    maskSize = gr.Slider(minimum=-10, maximum=10, step=1, value=0, label="Mask size")
+                howSplit = gr.Radio(["Horizontal only ▤", "Vertical only ▥", "Both ▦"], value = "Both ▦", label = "How to divide")
+                with gr.Accordion(label="Visualizer", open=False):  
+                    exampleImage = gr.Image(value=Image.open("./extensions/batch-face-swap/images/exampleB.jpg"), label="Split visualizer", show_label=False, type="pil", visible=True).style(height=500)
+                    with gr.Row(variant='compact'):
+                        with gr.Column(variant='panel'):
+                            gr.HTML("", visible=False)
+                        with gr.Column(variant='compact'):
+                            visualizationOpacity = gr.Slider(minimum=0, maximum=100, step=1, value=75, label="Opacity")
         
         # Other
-        gr.HTML("<p style=\"margin-top:0.75em;font-size:1.25em\">Other:</p>")
         with gr.Column(variant='panel'):
-            htmlTip4 = gr.HTML("<p>Activate 'Show results in WebUI' checkbox to see results in the WebUI at the end (not recommended when processing a large number of images)</p><p>'Count faces before generating' is required to see accurate progress bar (not recommended when processing a large number of images). Because without knowing the number of faces, the webui can't know how many images it will generate. Activating it means you will search for faces twice.</p>",visible=False)
-            with gr.Row():
-                saveNoFace = gr.Checkbox(value=True, label="Save image even if face was not found")
-                viewResults = gr.Checkbox(value=False, label="Show results in WebUI")
-            with gr.Row():
-                countFaces = gr.Checkbox(value=False, label="Count faces before generating (accurate progress bar but NOT recommended)")
-            with gr.Row():
-                showTips = gr.Checkbox(value=False, label="Show tips")
+            gr.HTML("<p style=\"margin-top:0.75em;font-size:1.5em\">Other:</p>")
+            with gr.Column(variant='panel'):
+                htmlTip4 = gr.HTML("<p>Activate 'Show results in WebUI' checkbox to see results in the WebUI at the end (not recommended when processing a large number of images)</p><p>'Count faces before generating' is required to see accurate progress bar (not recommended when processing a large number of images). Because without knowing the number of faces, the webui can't know how many images it will generate. Activating it means you will search for faces twice.</p>",visible=False)
+                with gr.Row():
+                    saveNoFace = gr.Checkbox(value=True, label="Save image even if face was not found")
+                    viewResults = gr.Checkbox(value=False, label="Show results in WebUI")
+                with gr.Row():
+                    countFaces = gr.Checkbox(value=False, label="Count faces before generating (accurate progress bar but NOT recommended)")
+                with gr.Row():
+                    showTips = gr.Checkbox(value=False, label="Show tips")
 
         path.change(fn=None, _js="gradioApp().getElementById('mode_img2img').querySelectorAll('button')[4].click()", inputs=None, outputs=None)
         onlyMask.change(switchSaveMaskInteractivity, onlyMask, saveMask)
         onlyMask.change(switchSaveMask, onlyMask, saveMask)
-        saveMask.change(switchMaskPathVisibility, [saveMask, onlyMask], maskPathRow)
-        onlyMask.change(switchMaskPathVisibility, [saveMask, onlyMask], maskPathRow)
         invertMask.change(switchInvertMask, invertMask, singleMaskPerImage)
 
         visualizationOpacity.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, path, visualizationOpacity], exampleImage)
@@ -627,9 +677,9 @@ class Script(scripts.Script):
         showTips.change(switchTipsVisibility, showTips, htmlTip3)
         showTips.change(switchTipsVisibility, showTips, htmlTip4)
 
-        return [overrideDenoising, overrideMaskBlur, path, searchSubdir, divider, howSplit, saveMask, pathToSave, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize]
+        return [overrideDenoising, overrideMaskBlur, path, searchSubdir, divider, howSplit, saveMask, pathToSave, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName]
 
-    def run(self, p, overrideDenoising, overrideMaskBlur, path, searchSubdir, divider, howSplit, saveMask, pathToSave, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize):
+    def run(self, p, overrideDenoising, overrideMaskBlur, path, searchSubdir, divider, howSplit, saveMask, pathToSave, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName):
         comments = {}
         def infotext(iteration=0, position_in_batch=0):
             if p.all_prompts == None:
@@ -646,7 +696,7 @@ class Script(scripts.Script):
         all_images = []
         divider = int(divider)
 
-        finishedImages = generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMask, pathToSave, onlyMask, saveNoFace, overrideDenoising, overrideMaskBlur, invertMask, singleMaskPerImage, countFaces, maskSize, info)
+        finishedImages = generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMask, pathToSave, onlyMask, saveNoFace, overrideDenoising, overrideMaskBlur, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, info)
 
         if not viewResults:
             finishedImages = []
