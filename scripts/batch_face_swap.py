@@ -16,7 +16,7 @@ from modules.shared import opts, cmd_opts, state
 
 import cv2
 import numpy as np
-from PIL import Image, ImageOps, ImageDraw, UnidentifiedImageError
+from PIL import Image, ImageOps, ImageDraw, ImageFilter, UnidentifiedImageError
 import math
 
 
@@ -198,7 +198,6 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
             mask = mask.crop(crop_region)
             image_mask = images.resize_image(2, mask, p.width, p.height)
 
-            
             image = image.crop(crop_region)
             image = images.resize_image(2, image, p.width, p.height)
 
@@ -210,10 +209,11 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
             image = imageOriginal
 
         for j in range(p.batch_size):
-            image = overlay_image
-                
+            image = imageOriginal             
             for k in range(len(generatedImages)):
-                image = apply_overlay(generatedImages[k][j], paste_to[k], image)
+                mask = Image.fromarray(masks[k])
+                mask = mask.filter(ImageFilter.GaussianBlur(p.mask_blur))
+                image = apply_overlay(generatedImages[k][j], paste_to[k], image, mask)
 
             if pathToSave != "":
                 if opts.samples_format == "png":
@@ -388,14 +388,30 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
 
     # RUN IF PATH IS NOT INSERTED AND IMAGE IS   
         if path == '' and p.init_images[0] != None:
-            print(f"\nWill process {len(p.init_images)} images, creating {p.n_iter * p.batch_size} new images for each.")
-            state.job_count = len(p.init_images) * p.n_iter
-            state.job = f"{1} out of {len(p.init_images)}"
-
             forced_filename = None
             image = p.init_images[0]
             width, height = image.size
 
+            if countFaces:
+                print("\nCounting faces...")
+                skip = 0
+                totalNumberOfFaces = findFaces(image, width, height, divider, onlyHorizontal, onlyVertical, None, totalNumberOfFaces, singleMaskPerImage, countFaces, maskSize, skip)
+
+            if not onlyMask and countFaces:
+                print(f"\nWill process {len(p.init_images)} images, found {totalNumberOfFaces} faces, generating {p.n_iter * p.batch_size} new images for each.")
+                state.job_count = totalNumberOfFaces * p.n_iter  
+            elif not onlyMask and not countFaces:
+                print(f"\nWill process {len(p.init_images)} images, creating {p.n_iter * p.batch_size} new images for each.")
+                state.job_count = len(p.init_images) * p.n_iter
+
+            if countFaces:
+                state.job = f"{1} out of {totalNumberOfFaces}"
+                totalNumberOfFaces = 0
+                wasCountFaces = True
+                countFaces = False
+            else:
+                state.job = f"{1} out of {len(p.init_images)}"
+            
             if not onlyMask:
                 if overrideDenoising == True:
                     p.denoising_strength = 0.5
@@ -468,6 +484,9 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
             
             if not onlyMask:
                 finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info, selectedTab)
+
+            if wasCountFaces == True:
+                countFaces = True
 
             print(f"Found {totalNumberOfFaces} faces in {len(p.init_images)} images.")
 

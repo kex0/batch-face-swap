@@ -1,7 +1,7 @@
 from modules import images
 from modules.shared import opts
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageOps, ImageChops
 
 import mediapipe as mp
 import numpy as np
@@ -32,16 +32,17 @@ def getFacialLandmarks(image):
 
         return facelandmarks
     
-def apply_overlay(image, paste_loc, overlay):
-    if paste_loc is not None:
-        x, y, w, h = paste_loc
-        base_image = Image.new('RGBA', (overlay.width, overlay.height))
-        image = images.resize_image(1, image, w, h)
-        base_image.paste(image, (x, y))
-        image = base_image
+def apply_overlay(image, paste_loc, imageOriginal, mask):
+    x, y, w, h = paste_loc
+    base_image = Image.new('RGBA', (imageOriginal.width, imageOriginal.height))
+    image = images.resize_image(1, image, w, h)
+    base_image.paste(image, (x, y))
+    face = base_image
+    new_mask = ImageChops.multiply(face.getchannel("A"), mask)
+    face.putalpha(new_mask)
 
-    image = image.convert('RGBA')
-    image.alpha_composite(overlay)
+    imageOriginal = imageOriginal.convert('RGBA')
+    image = Image.alpha_composite(imageOriginal, face)
 
     return image
 
