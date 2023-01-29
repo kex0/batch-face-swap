@@ -104,3 +104,22 @@ def listFiles(path, searchSubdir, allFiles):
 
     return allFiles
 
+def custom_save_image(p, image, pathToSave, forced_filename, suffix, info):
+    if pathToSave != "":
+        if opts.samples_format == "png":
+            images.save_image(image, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
+        elif image.mode != 'RGB':
+            image = image.convert('RGB')
+            images.save_image(image, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
+        else:
+            images.save_image(image, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
+
+    elif pathToSave == "":
+        if opts.samples_format == "png":
+            images.save_image(image, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
+        elif image.mode != 'RGB':
+            image = image.convert('RGB')
+            images.save_image(image, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
+        else:
+            images.save_image(image, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
+

@@ -166,12 +166,12 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
         else:
             for n in range(p.n_iter * p.batch_size):
                 if opts.samples_format == "png":
-                    images.save_image(proc.images[n], p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(n+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
+                    images.save_image(proc.images[n], opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(n+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
                 elif image.mode != 'RGB':
                     image = image.convert('RGB')
-                    images.save_image(proc.images[n], p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(n+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
+                    images.save_image(proc.images[n], opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(n+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
                 else:
-                    images.save_image(proc.images[n], p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(n+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
+                    images.save_image(proc.images[n], opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(n+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
 
             finishedImages.append(proc.images[n])
     else:
@@ -208,7 +208,7 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
 
             image = imageOriginal
 
-        for j in range(p.batch_size):
+        for j in range(p.n_iter * p.batch_size):
             image = imageOriginal             
             for k in range(len(generatedImages)):
                 mask = Image.fromarray(masks[k])
@@ -217,20 +217,20 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
 
             if pathToSave != "":
                 if opts.samples_format == "png":
-                    images.save_image(image, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and p.batch_size > 1 else forced_filename)
+                    images.save_image(image, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
                 elif image.mode != 'RGB':
                     image = image.convert('RGB')
-                    images.save_image(image, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and p.batch_size > 1 else forced_filename)
+                    images.save_image(image, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
                 else:
-                    images.save_image(image, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and p.batch_size > 1 else forced_filename)
+                    images.save_image(image, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
             else:
                 if opts.samples_format == "png":
-                    images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and p.batch_size > 1 else forced_filename)
+                    images.save_image(image, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
                 elif image.mode != 'RGB':
                     image = image.convert('RGB')
-                    images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and p.batch_size > 1 else forced_filename)
+                    images.save_image(image, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
                 else:
-                    images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and p.batch_size > 1 else forced_filename)
+                    images.save_image(image, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
 
             finishedImages.append(image)
 
@@ -240,6 +240,7 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
      
 
 def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMask, pathToSave, onlyMask, saveNoFace, overrideDenoising, overrideMaskBlur, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, info, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab):
+    suffix = None
     if selectedTab == "generateMasksTab":
         wasCountFaces = False
         finishedImages = []
@@ -316,55 +317,21 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
                 if onlyMask:
                     suffix = '_mask'
 
-                    # If path to save mask was provided
-                    if pathToSave != "":
-                        for i, mask in enumerate(masks):
-                            mask = Image.fromarray(mask)
+                    # Load mask
+                    for i, mask in enumerate(masks):
+                        mask = Image.fromarray(mask)
 
-                            # Invert mask if needed
-                            if invertMask:
-                                mask = ImageOps.invert(mask)
-                            finishedImages.append(mask)
+                        # Invert mask if needed
+                        if invertMask:
+                            mask = ImageOps.invert(mask)
+                        finishedImages.append(mask)
 
-                            # Save mask
-                            if saveMask == True:
-                                if opts.samples_format == "png":
-                                    images.save_image(mask, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
-                                elif mask.mode != 'RGB':
-                                    mask = mask.convert('RGB')
-                                    images.save_image(mask, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
-                                else:
-                                    images.save_image(mask, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
-
-                    # If path to save mask was NOT provided   
-                    elif pathToSave == "":
-                        for i, mask in enumerate(masks):
-                            mask = Image.fromarray(mask)
-
-                            # Invert mask if needed
-                            if invertMask:
-                                mask = ImageOps.invert(mask)
-                            finishedImages.append(mask)
-
-                            # Save mask
-                            if saveMask == True:
-                                if opts.samples_format == "png":
-                                    images.save_image(mask, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
-                                elif mask.mode != 'RGB':
-                                    mask = mask.convert('RGB')
-                                    images.save_image(mask, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
-                                else:
-                                    images.save_image(mask, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
-
+                        if saveMask:
+                            custom_save_image(p, mask, pathToSave, forced_filename, suffix, info)
+                            
                 # If face was not found but user wants to save images without face
                 if skip == 1 and saveNoFace and not onlyMask:
-                    if opts.samples_format == "png":
-                        images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename)
-                    elif image.mode != 'RGB':
-                        image = image.convert('RGB')
-                        images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename)
-                    else:
-                        images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename)  
+                    custom_save_image(p, image, pathToSave, forced_filename, suffix, info) 
                         
                     finishedImages.append(image)
                     state.skipped = True
@@ -425,55 +392,22 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
             if onlyMask:
                 suffix = '_mask'
 
-                # If path to save mask was provided
-                if pathToSave != "":
-                    for i, mask in enumerate(masks):
-                        mask = Image.fromarray(mask)
+                # Load mask
+                for i, mask in enumerate(masks):
+                    mask = Image.fromarray(mask)
 
-                        # Invert mask if needed
-                        if invertMask:
-                            mask = ImageOps.invert(mask)
-                        finishedImages.append(mask)
+                    # Invert mask if needed
+                    if invertMask:
+                        mask = ImageOps.invert(mask)
+                    finishedImages.append(mask)
 
-                        # Save mask
-                        if saveMask == True:
-                            if opts.samples_format == "png":
-                                images.save_image(mask, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
-                            elif mask.mode != 'RGB':
-                                mask = mask.convert('RGB')
-                                images.save_image(mask, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
-                            else:
-                                images.save_image(mask, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
-                    
-                # If path to save mask was NOT provided
-                elif pathToSave == "":
-                    for i, mask in enumerate(masks):
-                        mask = Image.fromarray(mask)
-
-                        # Invert mask if needed
-                        if invertMask:
-                            mask = ImageOps.invert(mask)
-                        finishedImages.append(mask)
-
-                        # Save mask
-                        if saveMask == True:
-                            if opts.samples_format == "png":
-                                images.save_image(mask, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
-                            elif mask.mode != 'RGB':
-                                mask = mask.convert('RGB')
-                                images.save_image(mask, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
-                            else:
-                                images.save_image(mask, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
+                    if saveMask:
+                        custom_save_image(p, mask, pathToSave, forced_filename, suffix, info)
+                        
 
             # If face was not found but user wants to save images without face
             if skip == 1 and saveNoFace and not onlyMask:
-                if opts.samples_format == "png":
-                    images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename)
-                elif image.mode != 'RGB':
-                    image = image.convert('RGB')
-                    images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename)
-                else:
-                    images.save_image(image, p.outpath_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename)
+                custom_save_image(p, image, pathToSave, forced_filename, suffix, info)
                     
                 finishedImages.append(image)
                 state.skipped = True
@@ -490,6 +424,7 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
 
             print(f"Found {totalNumberOfFaces} faces in {len(p.init_images)} images.")
 
+# EXISTING MASKS
     elif selectedTab == "existingMasksTab":
         finishedImages = []
         allImages = []
@@ -567,8 +502,6 @@ class Script(scripts.Script):
                 onlyVertical = False
                 if len(allFiles) == 0:
                     image = Image.open("./extensions/batch-face-swap/images/exampleB.jpg")
-                    # mask = Image.open("./extensions/batch-face-swap/images/exampleB_mask.jpg")
-                    # mask = np.array(mask)
                 width, height = image.size
 
                 # if len(masks)==0 and path != '':
@@ -630,8 +563,6 @@ class Script(scripts.Script):
                 onlyVertical = False
                 if len(allFiles) == 0:
                     image = Image.open("./extensions/batch-face-swap/images/exampleH.jpg")
-                    # mask = Image.open("./extensions/batch-face-swap/images/exampleH_mask.jpg")
-                    # mask = np.array(mask)
                 width, height = image.size
 
                 # if len(masks)==0 and path != '':
@@ -778,9 +709,10 @@ class Script(scripts.Script):
         return [overrideDenoising, overrideMaskBlur, path, searchSubdir, divider, howSplit, saveMask, pathToSave, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab]
 
     def run(self, p, overrideDenoising, overrideMaskBlur, path, searchSubdir, divider, howSplit, saveMask, pathToSave, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab):
-        comments = {}
         wasGrid = p.do_not_save_grid
         p.do_not_save_grid = True
+
+        comments = {}
         def infotext(iteration=0, position_in_batch=0):
             if p.all_prompts == None:
                 p.all_prompts = [p.prompt]
@@ -795,9 +727,7 @@ class Script(scripts.Script):
         info = infotext()
         all_images = []
 
-
         finishedImages = generateImages(p, path, searchSubdir, viewResults, int(divider), howSplit, saveMask, pathToSave, onlyMask, saveNoFace, overrideDenoising, overrideMaskBlur, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, info, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab)
-        
         
         if not viewResults:
             finishedImages = []
