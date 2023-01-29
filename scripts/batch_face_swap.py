@@ -239,7 +239,7 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
      
 
 def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMask, pathToSave, onlyMask, saveNoFace, overrideDenoising, overrideMaskBlur, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, info, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab):
-    suffix = None
+    suffix = ''
     if selectedTab == "generateMasksTab":
         wasCountFaces = False
         finishedImages = []
