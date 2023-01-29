@@ -154,8 +154,8 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
 
         proc = process_images(p)
         
-        if pathToSave != "":
-            for n in range(p.n_iter * p.batch_size):
+        for n in range(p.n_iter * p.batch_size):
+            if pathToSave != "":
                 if opts.samples_format == "png":
                     images.save_image(proc.images[n], pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(n+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
                 elif image.mode != 'RGB':
@@ -163,8 +163,7 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
                     images.save_image(proc.images[n], pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(n+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
                 else:
                     images.save_image(proc.images[n], pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(n+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
-        else:
-            for n in range(p.n_iter * p.batch_size):
+            else:
                 if opts.samples_format == "png":
                     images.save_image(proc.images[n], opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(n+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
                 elif image.mode != 'RGB':
