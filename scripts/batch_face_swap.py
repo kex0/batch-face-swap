@@ -709,6 +709,9 @@ class Script(scripts.Script):
 
     def run(self, p, overrideDenoising, overrideMaskBlur, path, searchSubdir, divider, howSplit, saveMask, pathToSave, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab):
         wasGrid = p.do_not_save_grid
+        wasInpaintFullRes = p.inpaint_full_res
+
+        p.inpaint_full_res = 1
         p.do_not_save_grid = True
 
         comments = {}
@@ -733,6 +736,8 @@ class Script(scripts.Script):
 
         all_images += finishedImages   
         proc = Processed(p, all_images)
+
         p.do_not_save_grid = wasGrid
+        p.inpaint_full_res = wasInpaintFullRes
 
         return proc
