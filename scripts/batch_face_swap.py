@@ -780,7 +780,7 @@ class Script(scripts.Script):
     def run(self, p, overrideDenoising, overrideMaskBlur, path, searchSubdir, divider, howSplit, saveMask, pathToSave, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab):
         comments = {}
         wasGrid = p.do_not_save_grid
-        p.do_not_save_grid = False
+        p.do_not_save_grid = True
         def infotext(iteration=0, position_in_batch=0):
             if p.all_prompts == None:
                 p.all_prompts = [p.prompt]
