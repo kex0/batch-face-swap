@@ -9,29 +9,6 @@ import math
 import cv2
 import os
 
-def getFacialLandmarks(image):
-    height, width, _ = image.shape
-    mp_face_mesh = mp.solutions.face_mesh
-    with mp_face_mesh.FaceMesh(static_image_mode=True,max_num_faces=4,min_detection_confidence=0.5) as face_mesh:
-        height, width, _ = image.shape
-        image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        result = face_mesh.process(image_rgb)
-
-        facelandmarks = []
-        if result.multi_face_landmarks is not None:
-            for facial_landmarks in result.multi_face_landmarks:
-                landmarks = []
-                for i in range(0, 468):
-                    pt1 = facial_landmarks.landmark[i]
-                    x = int(pt1.x * width)
-                    y = int(pt1.y * height)
-                    landmarks.append([x, y])
-                    #cv2.circle(image, (x, y), 2, (100,100,0), -1)
-                #cv2.imshow("Cropped", image)
-                facelandmarks.append(np.array(landmarks, np.int32))
-
-        return facelandmarks
-    
 def apply_overlay(image, paste_loc, imageOriginal, mask):
     x, y, w, h = paste_loc
     base_image = Image.new('RGBA', (imageOriginal.width, imageOriginal.height))
@@ -123,3 +100,5 @@ def custom_save_image(p, image, pathToSave, forced_filename, suffix, info):
         else:
             images.save_image(image, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
 
+def debugsave(image):
+    images.save_image(image, os.getenv("AUTO1111_DEBUGDIR", "outputs"), "", "", "", "jpg", "", None)

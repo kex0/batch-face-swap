@@ -6,9 +6,11 @@ utils_dir = os.path.join(cwd, 'extensions', 'batch-face-swap', 'scripts')
 sys.path.extend([utils_dir])
 
 from bfs_utils import *
+from face_detect import *
 
 import modules.scripts as scripts
 import gradio as gr
+import time
 
 from modules import images, masking
 from modules.processing import process_images, create_infotext, Processed
@@ -19,8 +21,8 @@ import numpy as np
 from PIL import Image, ImageOps, ImageDraw, ImageFilter, UnidentifiedImageError
 import math
 
-
-def findFaces(image, width, height, divider, onlyHorizontal, onlyVertical, file, totalNumberOfFaces, singleMaskPerImage, countFaces, maskSize, skip):
+def findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file, totalNumberOfFaces, singleMaskPerImage, countFaces, maskSize, skip):
+    rejected = 0
     masks = []
     imageOriginal = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
     heightOriginal = height
@@ -36,7 +38,7 @@ def findFaces(image, width, height, divider, onlyHorizontal, onlyVertical, file,
     else:
         small_width = math.ceil(width / divider)
         small_height = math.ceil(height / divider)
-    
+
 
     # Divide the large image into a list of small images
     small_images = []
@@ -47,21 +49,55 @@ def findFaces(image, width, height, divider, onlyHorizontal, onlyVertical, file,
     # Process each small image
     processed_images = []
     facesInImage = 0
+
     for i, small_image in enumerate(small_images):
         small_image = cv2.cvtColor(np.array(small_image), cv2.COLOR_RGB2BGR)
-        landmarks = []
-        landmarks = getFacialLandmarks(small_image)
-        numberOfFaces = int(len(landmarks))
-        totalNumberOfFaces += numberOfFaces
-        if countFaces:
-            return totalNumberOfFaces
 
         faces = []
-        for landmark in landmarks:
-            convexhull = cv2.convexHull(landmark)
-            faces.append(convexhull)
 
-        if len(landmarks) == 0:
+        if facecfg.faceMode != FaceMode.ORIGINAL:
+            # use OpenCV2 multi-scale face detector to find all the faces
+
+            known_face_rects = []
+
+            # first find the faces the old way, since OpenCV is BAD at faces near the camera
+            # save the convex hulls, but also getting bounding boxes so OpenCV can skip those
+            landmarks = getFacialLandmarks(small_image, facecfg)
+            for landmark in landmarks:
+                convexhull = cv2.convexHull(landmark)
+                faces.append(convexhull)
+                bounds = cv2.boundingRect(convexhull)
+                known_face_rects.append(list(bounds)) # convert tuple to array for consistency
+
+            faceRects = getFaceRectangles(small_image, known_face_rects, facecfg)
+
+            for rect in faceRects:
+                landmarkHull = getFacialLandmarkConvexHull(small_image, rect, facecfg)
+                if landmarkHull is not None:
+                    faces.append(landmarkHull)
+                else:
+                    rejected += 1
+
+            numberOfFaces = int(len(faces))
+            totalNumberOfFaces += numberOfFaces
+            if countFaces:
+                continue
+
+        else:
+            landmarks = []
+            landmarks = getFacialLandmarks(small_image, facecfg)
+            numberOfFaces = int(len(landmarks))
+            totalNumberOfFaces += numberOfFaces
+
+            if countFaces:
+                continue
+
+            faces = []
+            for landmark in landmarks:
+                 convexhull = cv2.convexHull(landmark)
+                 faces.append(convexhull)
+
+        if len(faces) == 0:
             small_image[:] = (0, 0, 0)
 
         if numberOfFaces > 0:
@@ -70,16 +106,22 @@ def findFaces(image, width, height, divider, onlyHorizontal, onlyVertical, file,
             skip = 1
 
         mask = np.zeros((small_height, small_width), np.uint8)
-        for i in range(len(landmarks)):
+        for i in range(len(faces)):
             small_image = cv2.fillConvexPoly(mask, faces[i], 255)
         processed_image = Image.fromarray(small_image)
         processed_images.append(processed_image)
 
+    if countFaces:
+        return totalNumberOfFaces
+
     if file != None:
-        print(f"Found {facesInImage} face(s) in {str(file)}")
+        if FaceDetectDevelopment:
+            print(f"Found {facesInImage} face(s) in {str(file)} (rejected {rejected} from OpenCV)")
+        else:
+            print(f"Found {facesInImage} face(s) in {str(file)}")
     # else:
     #     print(f"Found {facesInImage} face(s)")
-    
+
     # Create a new image with the same size as the original large image
     new_image = Image.new('RGB', (width, height))
 
@@ -132,11 +174,32 @@ def findFaces(image, width, height, divider, onlyHorizontal, onlyVertical, file,
                 whitePixelThreshold = 0.0005 * (widthOriginal * heightOriginal)
                 if (whitePixels < whitePixelThreshold):
                     segmentFaces = False
+
             return masks, totalNumberOfFaces, skip
 
     masks.append(mask)
 
     return masks, totalNumberOfFaces, skip
+
+# generate debug image
+def faceDebug(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info):
+    generatedImages = []
+    paste_to = []
+    imageOriginal = image
+    overlay_image = image
+    print( f"here, {len(masks)}" )
+
+    for n, mask in enumerate(masks):
+        mask = Image.fromarray(masks[n])
+        if invertMask:
+            mask = ImageOps.invert(mask)
+
+        image_masked = Image.new('RGBa', (image.width, image.height))
+        image_masked.paste(overlay_image.convert("RGBA").convert("RGBa"), mask=ImageOps.invert(mask.convert('L')))
+
+        overlay_image = image_masked.convert('RGBA')
+
+    debugsave(overlay_image)
 
 def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info, selectedTab):
     p.do_not_save_samples = True
@@ -153,7 +216,7 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
         p.image_mask = mask
 
         proc = process_images(p)
-        
+
         for n in range(p.n_iter * p.batch_size):
             if pathToSave != "":
                 if opts.samples_format == "png":
@@ -208,7 +271,7 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
             image = imageOriginal
 
         for j in range(p.n_iter * p.batch_size):
-            image = imageOriginal             
+            image = imageOriginal
             for k in range(len(generatedImages)):
                 mask = Image.fromarray(masks[k])
                 mask = mask.filter(ImageFilter.GaussianBlur(p.mask_blur))
@@ -236,9 +299,8 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
         p.do_not_save_samples = False
 
     return finishedImages
-     
 
-def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMask, pathToSave, onlyMask, saveNoFace, overrideDenoising, overrideMaskBlur, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, info, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab):
+def generateImages(p, facecfg, path, searchSubdir, viewResults, divider, howSplit, saveMask, pathToSave, onlyMask, saveNoFace, overrideDenoising, overrideMaskBlur, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, info, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab):
     suffix = ''
     if selectedTab == "generateMasksTab":
         wasCountFaces = False
@@ -259,6 +321,7 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
     # RUN IF PATH IS INSERTED
         if path != '':
             allFiles = listFiles(path, searchSubdir, allFiles)
+            start_time = time.thread_time()
 
             if countFaces:
                 print("\nCounting faces...")
@@ -266,11 +329,11 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
                     skip = 0
                     image = Image.open(file)
                     width, height = image.size
-                    totalNumberOfFaces = findFaces(image, width, height, divider, onlyHorizontal, onlyVertical, file, totalNumberOfFaces, singleMaskPerImage, countFaces, maskSize, skip)
-                        
+                    totalNumberOfFaces = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file, totalNumberOfFaces, singleMaskPerImage, countFaces, maskSize, skip)
+
             if not onlyMask and countFaces:
                 print(f"\nWill process {len(allFiles)} images, found {totalNumberOfFaces} faces, generating {p.n_iter * p.batch_size} new images for each.")
-                state.job_count = totalNumberOfFaces * p.n_iter  
+                state.job_count = totalNumberOfFaces * p.n_iter
             elif not onlyMask and not countFaces:
                 print(f"\nWill process {len(allFiles)} images, generating {p.n_iter * p.batch_size} new images for each.")
                 state.job_count = len(allFiles) * p.n_iter
@@ -295,14 +358,14 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
                     state.interrupted = False
                 elif state.interrupted:
                     break
-                
+
                 try:
                     image = Image.open(file)
                     width, height = image.size
                 except UnidentifiedImageError:
                     print(f"\nUnable to open {file}, skipping")
                     continue
-                
+
                 if not onlyMask:
                     if overrideDenoising == True:
                         p.denoising_strength = 0.5
@@ -310,8 +373,11 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
                         p.mask_blur = int(math.ceil(0.01*height))
 
                 skip = 0
-                masks, totalNumberOfFaces, skip = findFaces(image, width, height, divider, onlyHorizontal, onlyVertical, file, totalNumberOfFaces, singleMaskPerImage, countFaces, maskSize, skip)                   
-            
+                masks, totalNumberOfFaces, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file, totalNumberOfFaces, singleMaskPerImage, countFaces, maskSize, skip)
+
+                if facecfg.debugSave:
+                    faceDebug(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info)
+
                 # Only generate mask
                 if onlyMask:
                     suffix = '_mask'
@@ -327,11 +393,11 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
 
                         if saveMask:
                             custom_save_image(p, mask, pathToSave, forced_filename, suffix, info)
-                            
+
                 # If face was not found but user wants to save images without face
                 if skip == 1 and saveNoFace and not onlyMask:
-                    custom_save_image(p, image, pathToSave, forced_filename, suffix, info) 
-                        
+                    custom_save_image(p, image, pathToSave, forced_filename, suffix, info)
+
                     finishedImages.append(image)
                     state.skipped = True
                     continue
@@ -340,7 +406,7 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
                 if skip == 1:
                     state.skipped = True
                     continue
-                
+
                 if not onlyMask:
                     finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info, selectedTab)
 
@@ -350,9 +416,10 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
             if wasCountFaces == True:
                 countFaces = True
 
-            print(f"Found {totalNumberOfFaces} faces in {len(allFiles)} images.") 
+            timing = time.thread_time() - start_time
+            print(f"Found {totalNumberOfFaces} faces in {len(allFiles)} images in {timing} seconds.")
 
-    # RUN IF PATH IS NOT INSERTED AND IMAGE IS   
+    # RUN IF PATH IS NOT INSERTED AND IMAGE IS
         if path == '' and p.init_images[0] != None:
             forced_filename = None
             image = p.init_images[0]
@@ -365,7 +432,7 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
 
             if not onlyMask and countFaces:
                 print(f"\nWill process {len(p.init_images)} images, found {totalNumberOfFaces} faces, generating {p.n_iter * p.batch_size} new images for each.")
-                state.job_count = totalNumberOfFaces * p.n_iter  
+                state.job_count = totalNumberOfFaces * p.n_iter
             elif not onlyMask and not countFaces:
                 print(f"\nWill process {len(p.init_images)} images, creating {p.n_iter * p.batch_size} new images for each.")
                 state.job_count = len(p.init_images) * p.n_iter
@@ -377,7 +444,7 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
                 countFaces = False
             else:
                 state.job = f"{1} out of {len(p.init_images)}"
-            
+
             if not onlyMask:
                 if overrideDenoising == True:
                     p.denoising_strength = 0.5
@@ -385,10 +452,13 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
                     p.mask_blur = int(math.ceil(0.01*height))
 
             skip = 0
-            masks, totalNumberOfFaces, skip = findFaces(image, width, height, divider, onlyHorizontal, onlyVertical, None, totalNumberOfFaces, singleMaskPerImage, countFaces, maskSize, skip)
-            
+            masks, totalNumberOfFaces, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, None, totalNumberOfFaces, singleMaskPerImage, countFaces, maskSize, skip)
+            if facecfg.debugSave:
+                faceDebug(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info)
+
             # Only generate mask
             if onlyMask:
+
                 suffix = '_mask'
 
                 # Load mask
@@ -402,19 +472,19 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
 
                     if saveMask:
                         custom_save_image(p, mask, pathToSave, forced_filename, suffix, info)
-                        
+
 
             # If face was not found but user wants to save images without face
             if skip == 1 and saveNoFace and not onlyMask:
                 custom_save_image(p, image, pathToSave, forced_filename, suffix, info)
-                    
+
                 finishedImages.append(image)
                 state.skipped = True
-            
+
             # If face was not found, just skip
             if skip == 1:
                 state.skipped = True
-            
+
             if not onlyMask:
                 finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info, selectedTab)
 
@@ -434,7 +504,6 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
 
             print(f"\nWill process {len(allImages)} images, generating {p.n_iter * p.batch_size} new images for each.")
             state.job_count = len(allImages) * p.n_iter
-
             for i, file in enumerate(allImages):
                 forced_filename = os.path.splitext(os.path.basename(file))[0]
 
@@ -444,7 +513,7 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
                     state.skipped = False
                 elif state.interrupted:
                     break
-                
+
                 try:
                     image = Image.open(file)
                     width, height = image.size
@@ -454,7 +523,7 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
                 except UnidentifiedImageError:
                     print(f"\nUnable to open {file}, skipping")
                     continue
-                
+
                 if overrideDenoising == True:
                     p.denoising_strength = 0.5
                 if overrideMaskBlur == True:
@@ -467,7 +536,7 @@ def generateImages(p, path, searchSubdir, viewResults, divider, howSplit, saveMa
 
     return finishedImages
 
-class Script(scripts.Script):  
+class Script(scripts.Script):
     def title(self):
         return "Batch Face Swap"
 
@@ -476,7 +545,10 @@ class Script(scripts.Script):
 
     def ui(self, is_img2img):
 
-        def updateVisualizer(searchSubdir: bool, howSplit: str, divider: int, maskSize: int, path: str, visualizationOpacity: int):
+        def updateVisualizer(searchSubdir: bool, howSplit: str, divider: int, maskSize: int, path: str, visualizationOpacity: int, faceMode: int):
+            # this is a huge pain to patch through so don't bother for now
+
+            facecfg = FaceDetectConfig(faceMode)
             allFiles = []
             totalNumberOfFaces = 0
 
@@ -504,7 +576,8 @@ class Script(scripts.Script):
                 width, height = image.size
 
                 # if len(masks)==0 and path != '':
-                masks, totalNumberOfFaces, skip = findFaces(image, width, height, divider, onlyHorizontal, onlyVertical, file=None, totalNumberOfFaces=totalNumberOfFaces, singleMaskPerImage=True, countFaces=False, maskSize=maskSize, skip=0)
+                masks, totalNumberOfFaces, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file=None, totalNumberOfFaces=totalNumberOfFaces, singleMaskPerImage=True, countFaces=False, maskSize=maskSize, skip=0)
+
                 mask = masks[0]
 
                 mask = maskResize(mask, maskSize, height)
@@ -538,7 +611,8 @@ class Script(scripts.Script):
                 width, height = image.size
 
                 # if len(masks)==0 and path != '':
-                masks, totalNumberOfFaces, skip = findFaces(image, width, height, divider, onlyHorizontal, onlyVertical, file=None, totalNumberOfFaces=totalNumberOfFaces, singleMaskPerImage=True, countFaces=False, maskSize=maskSize, skip=0)
+                masks, totalNumberOfFaces, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file=None, totalNumberOfFaces=totalNumberOfFaces, singleMaskPerImage=True, countFaces=False, maskSize=maskSize, skip=0)
+
                 mask = masks[0]
 
                 mask = maskResize(mask, maskSize, height)
@@ -565,7 +639,8 @@ class Script(scripts.Script):
                 width, height = image.size
 
                 # if len(masks)==0 and path != '':
-                masks, totalNumberOfFaces, skip = findFaces(image, width, height, divider, onlyHorizontal, onlyVertical, file=None, totalNumberOfFaces=totalNumberOfFaces, singleMaskPerImage=True, countFaces=False, maskSize=maskSize, skip=0)
+                masks, totalNumberOfFaces, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file=None, totalNumberOfFaces=totalNumberOfFaces, singleMaskPerImage=True, countFaces=False, maskSize=maskSize, skip=0)
+
                 mask = masks[0]
 
                 mask = maskResize(mask, maskSize, height)
@@ -597,17 +672,20 @@ class Script(scripts.Script):
         def switchInvertMask(invertMask: bool):
             return gr.Checkbox.update(value=bool(invertMask))
 
-
-        with gr.Column(variant='panel'):
-            gr.HTML("<p style=\"margin-bottom:0.75em;margin-top:0.75em;font-size:1.5em;color:red\">Make sure you're in the \"Inpaint upload\" tab!</p>") 
+        with gr.Box():
+            # Face detection
+            with gr.Column(variant='panel'):
+                gr.HTML("<p style=\"margin-top:0.75em;margin-bottom:0.5em;font-size:1.5em\"><strong>Face detection:</strong></p>")
+                with gr.Row():
+                    faceDetectMode = gr.Dropdown(label="Detector", choices=face_mode_names, value=face_mode_names[FaceMode.DEFAULT], type="index", elem_id=self.elem_id("z_type"))
+                    minFace = gr.Slider(minimum=10, maximum=200, step=1  , value=30, label="Minimum face size in pixels")
 
         with gr.Box():
             # Overrides
             with gr.Column(variant='panel'):
-                gr.HTML("<p style=\"margin-top:0.75em;font-size:1.25em\">Overrides:</p>")       
+                gr.HTML("<p style=\"margin-top:0.75em;font-size:1.25em\">Overrides:</p>")
                 with gr.Row():
                     overrideDenoising = gr.Checkbox(value=True, label="""Override "Denoising strength" to 0.5""")
-                with gr.Row():
                     overrideMaskBlur = gr.Checkbox(value=True, label="""Override "Mask blur" to automatic""")
 
         with gr.Column(variant='panel'):
@@ -639,23 +717,23 @@ class Script(scripts.Script):
                 # Image splitter
                 with gr.Column(variant='panel'):
                     gr.HTML("<p style=\"margin-top:0.75em;margin-bottom:0.5em;font-size:1.5em\"><strong>Image splitter:</strong></p>")
-                    with gr.Column(variant='panel'): 
+                    with gr.Column(variant='panel'):
                         htmlTip3 = gr.HTML("<p>This divides image to smaller images and tries to find a face in the individual smaller images.</p><p>Useful when faces are small in relation to the size of the whole picture and are not being detected.</p><p>(may result in mask that only covers a part of a face or no detection if the division goes right through the face)</p><p>Open 'Split visualizer' to see how it works.</p>",visible=False)
                         with gr.Row():
                             divider = gr.Slider(minimum=1, maximum=5, step=1, value=1, label="How many images to divide into")
                             maskSize = gr.Slider(minimum=-10, maximum=10, step=1, value=0, label="Mask size")
                         howSplit = gr.Radio(["Horizontal only ▤", "Vertical only ▥", "Both ▦"], value = "Both ▦", label = "How to divide")
-                        with gr.Accordion(label="Visualizer", open=False):  
+                        with gr.Accordion(label="Visualizer", open=False):
                             exampleImage = gr.Image(value=Image.open("./extensions/batch-face-swap/images/exampleB.jpg"), label="Split visualizer", show_label=False, type="pil", visible=True).style(height=500)
                             with gr.Row(variant='compact'):
                                 with gr.Column(variant='panel'):
                                     gr.HTML("", visible=False)
                                 with gr.Column(variant='compact'):
                                     visualizationOpacity = gr.Slider(minimum=0, maximum=100, step=1, value=75, label="Opacity")
-                
+
                 # Other
                 with gr.Column(variant='panel'):
-                    gr.HTML("<p style=\"margin-top:0.75em;font-size:1.5em\">Other:</p>")
+                    gr.HTML("<p style=\"font-size:1.5em\">Other:</p>")
                     with gr.Column(variant='panel'):
                         htmlTip4 = gr.HTML("<p>'Count faces before generating' is required to see accurate progress bar (not recommended when processing a large number of images). Because without knowing the number of faces, the webui can't know how many images it will generate. Activating it means you will search for faces twice.</p>",visible=False)
                         saveNoFace = gr.Checkbox(value=True, label="Save image even if face was not found")
@@ -678,25 +756,46 @@ class Script(scripts.Script):
                         viewResults = gr.Checkbox(value=False, label="Show results in WebUI")
                         showTips = gr.Checkbox(value=False, label="Show tips")
 
+        # Face detect internals
+        with gr.Column(variant='panel', visible = FaceDetectDevelopment):
+            gr.HTML("<p style=\"margin-top:0.75em;margin-bottom:0.5em;font-size:1.5em\"><strong>Debug internal config:</strong></p>")
+            with gr.Column(variant='panel'):
+                with gr.Row():
+                    debugSave     = gr.Checkbox(value=False, label="Save debug images")
+                    optimizeDetect= gr.Checkbox(value=True, label="Used optimized detector")
+                face_x_scale = gr.Slider(minimum=1 , maximum=  6, step=0.1, value=4, label="Face x-scaleX")
+                face_y_scale = gr.Slider(minimum=1 , maximum=  6, step=0.1, value=2.5, label="Face y-scaleX")
+
+                multiScale   = gr.Slider(minimum=1.0, maximum=200, step=0.001, value=1.03, label="Multiscale search stepsizess")
+                multiScale2  = gr.Slider(minimum=0.8, maximum=200, step=0.001, value=1.0 , label="Multiscale search secondary scalar")
+                multiScale3  = gr.Slider(minimum=0.8, maximum=2.0, step=0.001, value=1.0 , label="Multiscale search tertiary scale")
+
+                minNeighbors = gr.Slider(minimum=1 , maximum = 10, step=1  , value=5, label="minNeighbors")
+                mpconfidence = gr.Slider(minimum=0.01, maximum = 2.0, step=0.01, value=0.5, label="FaceMesh confidence threshold")
+                mpcount      = gr.Slider(minimum=1, maximum = 20, step=1, value=5, label="FaceMesh maximum faces")
+
         selectedTab = gr.Textbox(value="generateMasksTab", visible=False)
         generateMasksTab.select(lambda: "generateMasksTab", inputs=None, outputs=selectedTab)
         existingMasksTab.select(lambda: "existingMasksTab", inputs=None, outputs=selectedTab)
-        
+
         pathExisting.change(fn=None, _js="gradioApp().getElementById('mode_img2img').querySelectorAll('button')[4].click()", inputs=None, outputs=None)
         pathMasksExisting.change(fn=None, _js="gradioApp().getElementById('mode_img2img').querySelectorAll('button')[4].click()", inputs=None, outputs=None)
         pathToSaveExisting.change(fn=None, _js="gradioApp().getElementById('mode_img2img').querySelectorAll('button')[4].click()", inputs=None, outputs=None)
+
         path.change(fn=None, _js="gradioApp().getElementById('mode_img2img').querySelectorAll('button')[4].click()", inputs=None, outputs=None)
         pathToSave.change(fn=None, _js="gradioApp().getElementById('mode_img2img').querySelectorAll('button')[4].click()", inputs=None, outputs=None)
         onlyMask.change(switchSaveMaskInteractivity, onlyMask, saveMask)
         onlyMask.change(switchSaveMask, onlyMask, saveMask)
         invertMask.change(switchInvertMask, invertMask, singleMaskPerImage)
 
-        visualizationOpacity.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, path, visualizationOpacity], exampleImage)
-        searchSubdir.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, path, visualizationOpacity], exampleImage)
-        howSplit.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, path, visualizationOpacity], exampleImage)
-        divider.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, path, visualizationOpacity], exampleImage)
-        maskSize.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, path, visualizationOpacity], exampleImage)
-        path.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, path, visualizationOpacity], exampleImage)
+        faceDetectMode.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, path, visualizationOpacity, faceDetectMode], exampleImage)
+        minFace.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, path, visualizationOpacity, faceDetectMode], exampleImage)
+        visualizationOpacity.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, path, visualizationOpacity, faceDetectMode], exampleImage)
+        searchSubdir.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, path, visualizationOpacity, faceDetectMode], exampleImage)
+        howSplit.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, path, visualizationOpacity, faceDetectMode], exampleImage)
+        divider.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, path, visualizationOpacity, faceDetectMode], exampleImage)
+        maskSize.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, path, visualizationOpacity, faceDetectMode], exampleImage)
+        path.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, path, visualizationOpacity, faceDetectMode], exampleImage)
 
         showTips.change(switchTipsVisibility, showTips, htmlTip1)
         showTips.change(switchTipsVisibility, showTips, htmlTip2)
@@ -705,9 +804,9 @@ class Script(scripts.Script):
         showTips.change(switchTipsVisibility, showTips, htmlTip5)
         showTips.change(switchTipsVisibility, showTips, htmlTip6)
 
-        return [overrideDenoising, overrideMaskBlur, path, searchSubdir, divider, howSplit, saveMask, pathToSave, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab]
+        return [overrideDenoising, overrideMaskBlur, path, searchSubdir, divider, howSplit, saveMask, pathToSave, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect]
 
-    def run(self, p, overrideDenoising, overrideMaskBlur, path, searchSubdir, divider, howSplit, saveMask, pathToSave, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab):
+    def run(self, p, overrideDenoising, overrideMaskBlur, path, searchSubdir, divider, howSplit, saveMask, pathToSave, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect):
         wasGrid = p.do_not_save_grid
         wasInpaintFullRes = p.inpaint_full_res
 
@@ -729,12 +828,13 @@ class Script(scripts.Script):
         info = infotext()
         all_images = []
 
-        finishedImages = generateImages(p, path, searchSubdir, viewResults, int(divider), howSplit, saveMask, pathToSave, onlyMask, saveNoFace, overrideDenoising, overrideMaskBlur, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, info, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab)
-        
+        facecfg = FaceDetectConfig(faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect)
+        finishedImages = generateImages(p, facecfg, path, searchSubdir, viewResults, int(divider), howSplit, saveMask, pathToSave, onlyMask, saveNoFace, overrideDenoising, overrideMaskBlur, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, info, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab)
+
         if not viewResults:
             finishedImages = []
 
-        all_images += finishedImages   
+        all_images += finishedImages
         proc = Processed(p, all_images)
 
         p.do_not_save_grid = wasGrid
