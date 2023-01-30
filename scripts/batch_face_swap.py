@@ -497,10 +497,12 @@ def generateImages(p, facecfg, path, searchSubdir, viewResults, divider, howSpli
     elif selectedTab == "existingMasksTab":
         finishedImages = []
         allImages = []
+        allMasks = []
         searchSubdir = False
 
         if pathExisting != '' and pathMasksExisting != '':
             allImages = listFiles(pathExisting, searchSubdir, allImages)
+            allMasks = listFiles(pathMasksExisting, searchSubdir, allMasks)
 
             print(f"\nWill process {len(allImages)} images, generating {p.n_iter * p.batch_size} new images for each.")
             state.job_count = len(allImages) * p.n_iter
@@ -519,7 +521,7 @@ def generateImages(p, facecfg, path, searchSubdir, viewResults, divider, howSpli
                     width, height = image.size
 
                     masks = []
-                    masks.append(Image.open(os.path.join(pathMasksExisting, os.path.basename(file))))
+                    masks.append(Image.open(os.path.join(pathMasksExisting, os.path.splitext(os.path.basename(file))[0])+os.path.splitext(allMasks[i])[1]))
                 except UnidentifiedImageError:
                     print(f"\nUnable to open {file}, skipping")
                     continue
@@ -672,14 +674,9 @@ class Script(scripts.Script):
         def switchInvertMask(invertMask: bool):
             return gr.Checkbox.update(value=bool(invertMask))
 
-        with gr.Box():
-            # Face detection
-            with gr.Column(variant='panel'):
-                gr.HTML("<p style=\"margin-top:0.75em;margin-bottom:0.5em;font-size:1.5em\"><strong>Face detection:</strong></p>")
-                with gr.Row():
-                    faceDetectMode = gr.Dropdown(label="Detector", choices=face_mode_names, value=face_mode_names[FaceMode.DEFAULT], type="index", elem_id=self.elem_id("z_type"))
-                    minFace = gr.Slider(minimum=10, maximum=200, step=1  , value=30, label="Minimum face size in pixels")
-
+        with gr.Column(variant='panel'):
+            gr.HTML("<p style=\"margin-bottom:0.75em;margin-top:0.75em;font-size:1.5em;color:red\">Make sure you're in the \"Inpaint upload\" tab!</p>") 
+        
         with gr.Box():
             # Overrides
             with gr.Column(variant='panel'):
@@ -690,12 +687,19 @@ class Script(scripts.Script):
 
         with gr.Column(variant='panel'):
             with gr.Tab("Generate masks") as generateMasksTab:
+                # Face detection
+                with gr.Column(variant='compact'):
+                    gr.HTML("<p style=\"margin-top:0.10em;margin-bottom:0.75em;font-size:1.5em\"><strong>Face detection:</strong></p>")
+                    with gr.Row():
+                        faceDetectMode = gr.Dropdown(label="Detector", choices=face_mode_names, value=face_mode_names[FaceMode.DEFAULT], type="index", elem_id=self.elem_id("z_type"))
+                        minFace = gr.Slider(minimum=10, maximum=200, step=1  , value=30, label="Minimum face size in pixels")
+
                 with gr.Column(variant='panel'):
                     htmlTip1 = gr.HTML("<p>Activate the 'Masks only' checkbox to see how many faces do your current settings detect without generating SD image. (check console)</p><p>You can also save generated masks to disk. Only possible with 'Masks only' (if you leave path empty, it will save the masks to your default webui outputs directory)</p><p>'Single mask per image' is only recommended with 'Invert mask' or if you want to save one mask per image, not per face. If you activate it without inverting mask, and try to process an image with multiple faces, it will generate only one image for all faces, producing bad results.</p>",visible=False)
                     # Settings
                     with gr.Column(variant='panel'):
-                        gr.HTML("<p style=\"margin-top:0.75em;font-size:1.25em\">Settings:</p>")
-                        with gr.Column():
+                        gr.HTML("<p style=\"margin-top:0.10em;font-size:1.5em\">Settings:</p>")
+                        with gr.Column(variant='compact'):
                             with gr.Row():
                                 onlyMask = gr.Checkbox(value=False, label="Masks only", visible=True)
                                 saveMask = gr.Checkbox(value=False, label="Save masks to disk", interactive=False)
@@ -705,7 +709,7 @@ class Script(scripts.Script):
 
                 # Path to images
                 with gr.Column(variant='panel'):
-                    gr.HTML("<p style=\"margin-top:0.75em;margin-bottom:0.5em;font-size:1.5em\"><strong>Path to images:</strong></p>")
+                    gr.HTML("<p style=\"margin-top:0.10em;font-size:1.5em\"><strong>Path to images:</strong></p>")
                     with gr.Column(variant='panel'):
                         htmlTip2 = gr.HTML("<p>'Load from subdirectories' will include all images in all subdirectories.</p>",visible=False)
                         with gr.Row():
@@ -716,7 +720,7 @@ class Script(scripts.Script):
 
                 # Image splitter
                 with gr.Column(variant='panel'):
-                    gr.HTML("<p style=\"margin-top:0.75em;margin-bottom:0.5em;font-size:1.5em\"><strong>Image splitter:</strong></p>")
+                    gr.HTML("<p style=\"margin-top:0.10em;font-size:1.5em\"><strong>Image splitter:</strong></p>")
                     with gr.Column(variant='panel'):
                         htmlTip3 = gr.HTML("<p>This divides image to smaller images and tries to find a face in the individual smaller images.</p><p>Useful when faces are small in relation to the size of the whole picture and are not being detected.</p><p>(may result in mask that only covers a part of a face or no detection if the division goes right through the face)</p><p>Open 'Split visualizer' to see how it works.</p>",visible=False)
                         with gr.Row():
@@ -733,7 +737,7 @@ class Script(scripts.Script):
 
                 # Other
                 with gr.Column(variant='panel'):
-                    gr.HTML("<p style=\"font-size:1.5em\">Other:</p>")
+                    gr.HTML("<p style=\"margin-top:0.10em;font-size:1.5em\">Other:</p>")
                     with gr.Column(variant='panel'):
                         htmlTip4 = gr.HTML("<p>'Count faces before generating' is required to see accurate progress bar (not recommended when processing a large number of images). Because without knowing the number of faces, the webui can't know how many images it will generate. Activating it means you will search for faces twice.</p>",visible=False)
                         saveNoFace = gr.Checkbox(value=True, label="Save image even if face was not found")
@@ -749,12 +753,11 @@ class Script(scripts.Script):
         # General
         with gr.Box():
             with gr.Column(variant='panel'):
-                gr.HTML("<p style=\"margin-top:0.75em;font-size:1.5em\">General:</p>")
-                with gr.Column(variant='panel'):
-                    htmlTip6 = gr.HTML("<p>Activate 'Show results in WebUI' checkbox to see results in the WebUI at the end (not recommended when processing a large number of images)</p>",visible=False)
-                    with gr.Row():
-                        viewResults = gr.Checkbox(value=False, label="Show results in WebUI")
-                        showTips = gr.Checkbox(value=False, label="Show tips")
+                gr.HTML("<p style=\"margin-top:0.10em;font-size:1.5em\">General:</p>")
+                htmlTip6 = gr.HTML("<p>Activate 'Show results in WebUI' checkbox to see results in the WebUI at the end (not recommended when processing a large number of images)</p>",visible=False)
+                with gr.Row():
+                    viewResults = gr.Checkbox(value=False, label="Show results in WebUI")
+                    showTips = gr.Checkbox(value=False, label="Show tips")
 
         # Face detect internals
         with gr.Column(variant='panel', visible = FaceDetectDevelopment):
@@ -778,6 +781,9 @@ class Script(scripts.Script):
         generateMasksTab.select(lambda: "generateMasksTab", inputs=None, outputs=selectedTab)
         existingMasksTab.select(lambda: "existingMasksTab", inputs=None, outputs=selectedTab)
 
+        faceDetectMode.change(fn=None, _js="gradioApp().getElementById('mode_img2img').querySelectorAll('button')[4].click()", inputs=None, outputs=None)
+        minFace.change(fn=None, _js="gradioApp().getElementById('mode_img2img').querySelectorAll('button')[4].click()", inputs=None, outputs=None)
+        
         pathExisting.change(fn=None, _js="gradioApp().getElementById('mode_img2img').querySelectorAll('button')[4].click()", inputs=None, outputs=None)
         pathMasksExisting.change(fn=None, _js="gradioApp().getElementById('mode_img2img').querySelectorAll('button')[4].click()", inputs=None, outputs=None)
         pathToSaveExisting.change(fn=None, _js="gradioApp().getElementById('mode_img2img').querySelectorAll('button')[4].click()", inputs=None, outputs=None)
