@@ -20,7 +20,7 @@ class FaceMode(IntEnum):
     OPENCV_SLOWEST=3
     DEVELOPMENT=4 # must be highest numbered to avoid breaking UI
 
-    DEFAULT=0     # the one the UI defaults to
+    DEFAULT=1     # the one the UI defaults to
 
 # for the UI dropdown, we want an array that's indexed by the above numbers, and we don't want
 # bugs if you tweak them and don't keep the array in sync, so initialize the array explicitly

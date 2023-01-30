@@ -672,11 +672,13 @@ class Script(scripts.Script):
         def switchInvertMask(invertMask: bool):
             return gr.Checkbox.update(value=bool(invertMask))
 
-        with gr.Column(variant='panel'):
-            gr.HTML("<p style=\"margin-top:0.75em;margin-bottom:0.5em;font-size:1.5em\"><strong>Face detection:</strong></p>")
-            with gr.Row():
-                faceDetectMode = gr.Dropdown(label="Detector", choices=face_mode_names, value=face_mode_names[FaceMode.DEFAULT], type="index", elem_id=self.elem_id("z_type"))
-                minFace = gr.Slider(minimum=10, maximum=200, step=1  , value=30, label="Minimum face size in pixels")
+        with gr.Box():
+            # Face detection
+            with gr.Column(variant='panel'):
+                gr.HTML("<p style=\"margin-top:0.75em;margin-bottom:0.5em;font-size:1.5em\"><strong>Face detection:</strong></p>")
+                with gr.Row():
+                    faceDetectMode = gr.Dropdown(label="Detector", choices=face_mode_names, value=face_mode_names[FaceMode.DEFAULT], type="index", elem_id=self.elem_id("z_type"))
+                    minFace = gr.Slider(minimum=10, maximum=200, step=1  , value=30, label="Minimum face size in pixels")
 
         with gr.Box():
             # Overrides
@@ -684,7 +686,6 @@ class Script(scripts.Script):
                 gr.HTML("<p style=\"margin-top:0.75em;font-size:1.25em\">Overrides:</p>")
                 with gr.Row():
                     overrideDenoising = gr.Checkbox(value=True, label="""Override "Denoising strength" to 0.5""")
-                with gr.Row():
                     overrideMaskBlur = gr.Checkbox(value=True, label="""Override "Mask blur" to automatic""")
 
         with gr.Column(variant='panel'):
@@ -732,7 +733,7 @@ class Script(scripts.Script):
 
                 # Other
                 with gr.Column(variant='panel'):
-                    gr.HTML("<p style=\"margin-top:0.75em;font-size:1.5em\">Other:</p>")
+                    gr.HTML("<p style=\"font-size:1.5em\">Other:</p>")
                     with gr.Column(variant='panel'):
                         htmlTip4 = gr.HTML("<p>'Count faces before generating' is required to see accurate progress bar (not recommended when processing a large number of images). Because without knowing the number of faces, the webui can't know how many images it will generate. Activating it means you will search for faces twice.</p>",visible=False)
                         saveNoFace = gr.Checkbox(value=True, label="Save image even if face was not found")
@@ -787,6 +788,8 @@ class Script(scripts.Script):
         onlyMask.change(switchSaveMask, onlyMask, saveMask)
         invertMask.change(switchInvertMask, invertMask, singleMaskPerImage)
 
+        faceDetectMode.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, path, visualizationOpacity, faceDetectMode], exampleImage)
+        minFace.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, path, visualizationOpacity, faceDetectMode], exampleImage)
         visualizationOpacity.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, path, visualizationOpacity, faceDetectMode], exampleImage)
         searchSubdir.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, path, visualizationOpacity, faceDetectMode], exampleImage)
         howSplit.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, path, visualizationOpacity, faceDetectMode], exampleImage)
