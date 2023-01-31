@@ -1,5 +1,13 @@
 FaceDetectDevelopment = False # set to True enable the development panel UI
 
+import sys
+import modules.scripts as scripts
+
+base_dir = scripts.basedir()
+sys.path.append(base_dir)
+
+from scripts.txt2mask import *
+
 from modules import images
 from modules.shared import opts
 
@@ -18,7 +26,8 @@ class FaceMode(IntEnum):
     OPENCV_NORMAL=1
     OPENCV_SLOW=2
     OPENCV_SLOWEST=3
-    DEVELOPMENT=4 # must be highest numbered to avoid breaking UI
+    CLIPSEG=4
+    DEVELOPMENT=5 # must be highest numbered to avoid breaking UI
 
     DEFAULT=1     # the one the UI defaults to
 
@@ -30,7 +39,8 @@ face_mode_init = [
     (FaceMode.ORIGINAL      , "Fastest (mediapipe FaceMesh, max 5 faces)"),
     (FaceMode.OPENCV_NORMAL , "Normal (OpenCV + FaceMesh)"),
     (FaceMode.OPENCV_SLOW   , "Slow (OpenCV + FaceMesh)"),
-    (FaceMode.OPENCV_SLOWEST, "Extremely slow (OpenCV + FaceMesh)")
+    (FaceMode.OPENCV_SLOWEST, "Extremely slow (OpenCV + FaceMesh)"),
+    (FaceMode.CLIPSEG, "God knows (OpenCV + FaceMesh + ClipSeg)")
 ]
 if FaceDetectDevelopment:
     face_mode_init.append((FaceMode.DEVELOPMENT, "Development testing"))
@@ -196,6 +206,63 @@ def getFacialLandmarkConvexHull(image, rect, facecfg):
             best_hull[i][0][1] += subrect_y0
 
     return best_hull
+
+def getFacesClipseg(image, rect, facecfg, detectionPrompt):
+    height, width, _ = image.shape
+
+    # make a subimage to hand to FaceMesh
+    (x,y,w,h) = rect
+
+    face_center_x      = (x + w//2)
+    face_center_y      = (y + h//2)
+
+    # the new image is just 2x the size of the face
+    subrect_width  = int(float(w) * facecfg.face_x_scale)
+    subrect_height = int(float(h) * facecfg.face_y_scale)
+    subrect_halfwidth  = subrect_width      // 2
+    subrect_halfheight = subrect_height     // 2
+    subrect_width      = subrect_halfwidth  * 2;
+    subrect_height     = subrect_halfheight * 2;
+    subrect_x_center = face_center_x
+    subrect_y_center = face_center_y
+
+    subimage = np.zeros((subrect_height, subrect_width, 3), np.uint8)
+
+    # this is the coordinates of the top left of the subimage relative to the original image
+    subrect_x0 = subrect_x_center - subrect_halfwidth
+    subrect_y0 = subrect_y_center - subrect_halfheight
+
+    # we allow room for up to 1/2 of a face adjacent
+    crop_face_x0 = face_center_x - w
+    crop_face_x1 = face_center_x + w
+    crop_face_y0 = face_center_y - h
+    crop_face_y1 = face_center_y + h
+
+    crop_face_x0 = max(crop_face_x0, 0 )
+    crop_face_y0 = max(crop_face_y0, 0)
+    crop_face_x1 = min(crop_face_x1, width )
+    crop_face_y1 = min(crop_face_y1, height)
+
+    # now crop the face coordinates down to the subrect as well
+    crop_face_x0 = max(crop_face_x0, subrect_x0)
+    crop_face_y0 = max(crop_face_y0, subrect_y0)
+    crop_face_x1 = min(crop_face_x1, subrect_x0 + subrect_width );
+    crop_face_y1 = min(crop_face_y1, subrect_y0 + subrect_height);
+
+    face_image = image[crop_face_y0:crop_face_y1, crop_face_x0:crop_face_x1]
+
+
+    # by construction the face image can't be larger than the subrect, but it can be smaller
+    subimage[crop_face_y0-subrect_y0:crop_face_y1-subrect_y0, crop_face_x0-subrect_x0:crop_face_x1-subrect_x0] = face_image
+
+    face = txt2mask(subimage, detectionPrompt)
+    face = np.array(face)
+
+    raise ValueError("This is as far as I got. I couldn't understand how to translate the face to coordinate space of the original image. Also no computing of intersection with face_rect")
+
+    return face
+
+    
 
 def contractRect(r):
     (x0,y0,w,h) = r
