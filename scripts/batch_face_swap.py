@@ -97,11 +97,26 @@ def findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertic
             faceRects = getFaceRectangles(small_image, known_face_rects, facecfg)
 
             for rect in faceRects:
-                face = getFacesClipseg(small_image, rect, facecfg, detectionPrompt)
-                if face is not None:
-                    faces.append(face)
+                landmarkHull = getFacialLandmarkConvexHull(small_image, rect, facecfg)
+                if landmarkHull is not None:
+                    faces.append(landmarkHull)
                 else:
                     rejected += 1
+
+            known_face_rects = []
+
+            for face in faces:
+                bounds = cv2.boundingRect(face)
+                known_face_rects.append(list(bounds)) # convert tuple to array for consistency
+
+            faces = []
+
+            blackImage = np.zeros((small_height, small_width, 3), dtype = "uint8")
+            for rect in known_face_rects:
+                face, blackImage = getFacesClipseg(small_image, blackImage, rect, detectionPrompt)
+                # test = Image.fromarray(face)
+                # test.show()
+            faces.append(face)
 
             numberOfFaces = int(len(faces))
             totalNumberOfFaces += numberOfFaces
@@ -138,7 +153,9 @@ def findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertic
             processed_image = Image.fromarray(small_image)
             processed_images.append(processed_image)
         else:
-            processed_images = faces
+            for face in faces:
+                processed_image = Image.fromarray(face)
+                processed_images.append(processed_image)
 
 
     if countFaces:

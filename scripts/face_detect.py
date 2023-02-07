@@ -207,60 +207,32 @@ def getFacialLandmarkConvexHull(image, rect, facecfg):
 
     return best_hull
 
-def getFacesClipseg(image, rect, facecfg, detectionPrompt):
-    height, width, _ = image.shape
-
+def getFacesClipseg(image, blackImage, rect, detectionPrompt):
     # make a subimage to hand to FaceMesh
     (x,y,w,h) = rect
 
-    face_center_x      = (x + w//2)
-    face_center_y      = (y + h//2)
+    #TODO Find the way to extend face image even if the face is at the edge of the image
+    face_image = image[y-50:y+h+50, x-50:x+w+50]
 
-    # the new image is just 2x the size of the face
-    subrect_width  = int(float(w) * facecfg.face_x_scale)
-    subrect_height = int(float(h) * facecfg.face_y_scale)
-    subrect_halfwidth  = subrect_width      // 2
-    subrect_halfheight = subrect_height     // 2
-    subrect_width      = subrect_halfwidth  * 2;
-    subrect_height     = subrect_halfheight * 2;
-    subrect_x_center = face_center_x
-    subrect_y_center = face_center_y
+    # Convert the cropped portion to PIL image
+    face = Image.fromarray(face_image)
+    b, g, r = face.split()
+    face = Image.merge("RGB", (r, g, b))
 
-    subimage = np.zeros((subrect_height, subrect_width, 3), np.uint8)
+    # Do something to the face (e.g. apply a filter)
+    face = txt2mask(face, detectionPrompt)
+    # face.show()
 
-    # this is the coordinates of the top left of the subimage relative to the original image
-    subrect_x0 = subrect_x_center - subrect_halfwidth
-    subrect_y0 = subrect_y_center - subrect_halfheight
+    # Convert the face back to numpy array
+    face_mask = np.array(face)
+    face_mask = face_mask[..., :3]
 
-    # we allow room for up to 1/2 of a face adjacent
-    crop_face_x0 = face_center_x - w
-    crop_face_x1 = face_center_x + w
-    crop_face_y0 = face_center_y - h
-    crop_face_y1 = face_center_y + h
+    # Paste the face back to the original image
+    blackImage[y-50:y+h+50, x-50:x+w+50] = face_mask
 
-    crop_face_x0 = max(crop_face_x0, 0 )
-    crop_face_y0 = max(crop_face_y0, 0)
-    crop_face_x1 = min(crop_face_x1, width )
-    crop_face_y1 = min(crop_face_y1, height)
+    face = blackImage
 
-    # now crop the face coordinates down to the subrect as well
-    crop_face_x0 = max(crop_face_x0, subrect_x0)
-    crop_face_y0 = max(crop_face_y0, subrect_y0)
-    crop_face_x1 = min(crop_face_x1, subrect_x0 + subrect_width );
-    crop_face_y1 = min(crop_face_y1, subrect_y0 + subrect_height);
-
-    face_image = image[crop_face_y0:crop_face_y1, crop_face_x0:crop_face_x1]
-
-
-    # by construction the face image can't be larger than the subrect, but it can be smaller
-    subimage[crop_face_y0-subrect_y0:crop_face_y1-subrect_y0, crop_face_x0-subrect_x0:crop_face_x1-subrect_x0] = face_image
-
-    face = txt2mask(subimage, detectionPrompt)
-    face = np.array(face)
-
-    raise ValueError("This is as far as I got. I couldn't understand how to translate the face to coordinate space of the original image. Also no computing of intersection with face_rect")
-
-    return face
+    return face, blackImage
 
     
 

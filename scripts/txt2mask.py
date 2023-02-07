@@ -16,7 +16,7 @@ from modules.images import flatten
 from modules.shared import opts
 
 def txt2mask(image, detectionPrompt):
-	image = Image.fromarray(image)
+	image.show()
 	width, height = image.size
 	delimiter_string = "|"
 
