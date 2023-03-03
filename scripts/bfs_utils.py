@@ -1,12 +1,18 @@
-from modules import images
+from modules import images, sd_samplers
 from modules.shared import opts
+from modules.processing import create_infotext
 
 from PIL import Image, ImageOps, ImageChops
+
+import traceback
+import piexif
+import json
 
 import mediapipe as mp
 import numpy as np
 import math
 import cv2
+import sys
 import os
 
 def apply_overlay(image, paste_loc, imageOriginal, mask):
@@ -102,3 +108,49 @@ def custom_save_image(p, image, pathToSave, forced_filename, suffix, info):
 
 def debugsave(image):
     images.save_image(image, os.getenv("AUTO1111_DEBUGDIR", "outputs"), "", "", "", "jpg", "", None)
+
+def read_info_from_image(image):
+    items = image.info or {}
+
+    geninfo = items.pop('parameters', None)
+
+    if "exif" in items:
+        exif = piexif.load(items["exif"])
+        exif_comment = (exif or {}).get("Exif", {}).get(piexif.ExifIFD.UserComment, b'')
+        try:
+            exif_comment = piexif.helper.UserComment.load(exif_comment)
+        except ValueError:
+            exif_comment = exif_comment.decode('utf8', errors="ignore")
+
+        if exif_comment:
+            items['exif comment'] = exif_comment
+            geninfo = exif_comment
+
+        for field in ['jfif', 'jfif_version', 'jfif_unit', 'jfif_density', 'dpi', 'exif',
+                      'loop', 'background', 'timestamp', 'duration']:
+            items.pop(field, None)
+
+    if items.get("Software", None) == "NovelAI":
+        try:
+            json_info = json.loads(items["Comment"])
+            sampler = sd_samplers.samplers_map.get(json_info["sampler"], "Euler a")
+
+            geninfo = f"""{items["Description"]}
+Negative prompt: {json_info["uc"]}
+Steps: {json_info["steps"]}, Sampler: {sampler}, CFG scale: {json_info["scale"]}, Seed: {json_info["seed"]}, Size: {image.width}x{image.height}, Clip skip: 2, ENSD: 31337"""
+        except Exception:
+            print("Error parsing NovelAI image generation parameters:", file=sys.stderr)
+            print(traceback.format_exc(), file=sys.stderr)
+
+    return geninfo, items
+
+def infotext(p, iteration=0, position_in_batch=0, comments={}):
+        if p.all_prompts == None:
+            p.all_prompts = [p.prompt]
+        if p.all_negative_prompts == None:
+            p.all_negative_prompts = [p.negative_prompt]
+        if p.all_seeds == None:
+            p.all_seeds = [p.seed]
+        if p.all_subseeds == None:
+            p.all_subseeds = [p.subseed]
+        return create_infotext(p, p.all_prompts, p.all_seeds, p.all_subseeds, comments, iteration, position_in_batch)
