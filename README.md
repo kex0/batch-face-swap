@@ -11,7 +11,7 @@
 4. Apply and restart UI
 ### Manual:
 1. Use `git clone https://github.com/kex0/batch-face-swap.git` from your SD web UI `/extensions` folder. 
-2. Open `requirements_versions.txt` and add `mediapipe`.
+2. Open `requirements_versions.txt` in the main SD web UI folder and add `mediapipe`.
 3. Start or reload SD web UI.
 
 ## Guide
