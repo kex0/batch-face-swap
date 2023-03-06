@@ -24,6 +24,7 @@ import math
 def findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file, totalNumberOfFaces, singleMaskPerImage, countFaces, maskSize, skip):
     rejected = 0
     masks = []
+    faces_info = []
     imageOriginal = cv2.cvtColor(np.array(image), cv2.COLOR_RGB2BGR)
     heightOriginal = height
     widthOriginal = width
@@ -51,6 +52,7 @@ def findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertic
     facesInImage = 0
 
     for i, small_image in enumerate(small_images):
+        small_image_index = i
         small_image = cv2.cvtColor(np.array(small_image), cv2.COLOR_RGB2BGR)
 
         faces = []
@@ -64,15 +66,36 @@ def findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertic
             # save the convex hulls, but also getting bounding boxes so OpenCV can skip those
             landmarks = getFacialLandmarks(small_image, facecfg)
             for landmark in landmarks:
+                face_info = {}
                 convexhull = cv2.convexHull(landmark)
                 faces.append(convexhull)
                 bounds = cv2.boundingRect(convexhull)
                 known_face_rects.append(list(bounds)) # convert tuple to array for consistency
 
+                x_chin = landmark[152][0]
+                y_chin = -landmark[152][1]
+                x_forehead = landmark[10][0]
+                y_forehead = -landmark[10][1]
+
+                deltaX = x_forehead - x_chin
+                deltaY = y_forehead - y_chin
+                
+                face_angle = math.atan2(deltaY, deltaX) * 180 / math.pi
+                if onlyHorizontal == True:
+                    x = (i // (divider) * small_width) + landmark[0][0]
+                    y = (i % (divider) * small_height) + landmark[0][1]
+                else:
+                    x = (i % (divider) * small_width) + landmark[0][0]
+                    y = (i // (divider) * small_height) + landmark[0][1]
+                face_center = (x, y)
+                face_info["angle"] = face_angle
+                face_info["center"] = face_center
+                faces_info.append(face_info)
+
             faceRects = getFaceRectangles(small_image, known_face_rects, facecfg)
 
             for rect in faceRects:
-                landmarkHull = getFacialLandmarkConvexHull(small_image, rect, facecfg)
+                landmarkHull, faces_info = getFacialLandmarkConvexHull(image, rect, faces_info, onlyHorizontal, divider, small_width, small_height, small_image_index, facecfg)
                 if landmarkHull is not None:
                     faces.append(landmarkHull)
                 else:
@@ -94,8 +117,29 @@ def findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertic
 
             faces = []
             for landmark in landmarks:
-                 convexhull = cv2.convexHull(landmark)
-                 faces.append(convexhull)
+                face_info = {}
+                convexhull = cv2.convexHull(landmark)
+                faces.append(convexhull)
+
+                x_chin = landmark[152][0]
+                y_chin = -landmark[152][1]
+                x_forehead = landmark[10][0]
+                y_forehead = -landmark[10][1]
+
+                deltaX = x_forehead - x_chin
+                deltaY = y_forehead - y_chin
+                
+                face_angle = math.atan2(deltaY, deltaX) * 180 / math.pi
+                if onlyHorizontal == True:
+                    x = (i // (divider) * small_width) + landmark[0][0]
+                    y = (i % (divider) * small_height) + landmark[0][1]
+                else:
+                    x = (i % (divider) * small_width) + landmark[0][0]
+                    y = (i // (divider) * small_height) + landmark[0][1]
+                face_center = (x, y)
+                face_info["angle"] = face_angle
+                face_info["center"] = face_center
+                faces_info.append(face_info)
 
         if len(faces) == 0:
             small_image[:] = (0, 0, 0)
@@ -175,11 +219,11 @@ def findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertic
                 if (whitePixels < whitePixelThreshold):
                     segmentFaces = False
 
-            return masks, totalNumberOfFaces, skip
+            return masks, totalNumberOfFaces, faces_info, skip
 
     masks.append(mask)
 
-    return masks, totalNumberOfFaces, skip
+    return masks, totalNumberOfFaces, faces_info, skip
 
 # generate debug image
 def faceDebug(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info):
@@ -201,19 +245,53 @@ def faceDebug(p, masks, image, finishedImages, invertMask, forced_filename, path
 
     debugsave(overlay_image)
 
-def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info, selectedTab, geninfo):
+def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info, selectedTab, geninfo, faces_info):
     p.do_not_save_samples = True
+    generatedImages = []
+    paste_to = []
+    imageOriginal = image
+    overlay_image = image
 
-    if len(masks) == 1:
-        if selectedTab == "existingMasksTab":
-            mask = masks[0]
-        else:
-            mask = Image.fromarray(masks[0])
+    for n, mask in enumerate(masks):
+        rotate = False
+        mask = Image.fromarray(masks[n])
         if invertMask:
             mask = ImageOps.invert(mask)
 
+        image_masked = Image.new('RGBa', (image.width, image.height))
+        image_masked.paste(overlay_image.convert("RGBA").convert("RGBa"), mask=ImageOps.invert(mask.convert('L')))
+
+        overlay_image = image_masked.convert('RGBA')
+
+        crop_region = masking.get_crop_region(np.array(mask), p.inpaint_full_res_padding)
+        crop_region = masking.expand_crop_region(crop_region, p.width, p.height, mask.width, mask.height)
+        x1, y1, x2, y2 = crop_region
+        paste_to.append((x1, y1, x2-x1, y2-y1))
+
+        for i in range(len(faces_info)):
+            pixel_color = mask.getpixel((faces_info[i]["center"][0],faces_info[i]["center"][1]))
+            if pixel_color == 255:
+                index = i
+                break
+
+        mask = mask.crop(crop_region)
+        image_mask = images.resize_image(2, mask, p.width, p.height)
+
+        image = image.crop(crop_region)
+        image = images.resize_image(2, image, p.width, p.height)
+        image_cropped = image
+
+        rotation_threshold = 20
+        if 90+rotation_threshold > faces_info[index]["angle"] and 90-rotation_threshold < faces_info[index]["angle"]:
+            pass
+        else:
+            angle_difference = (90-int(faces_info[index]["angle"]) + 360) % 360
+            image = image.rotate(angle_difference, expand=True)
+            image_mask = image_mask.rotate(angle_difference, expand=True)
+            rotate = True
+
         p.init_images = [image]
-        p.image_mask = mask
+        p.image_mask = image_mask
 
         if geninfo != "":
             p.prompt = str(geninfo.get("Prompt"))
@@ -224,104 +302,51 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
             p.seed = int(geninfo.get("Seed"))
             p.width = int(geninfo.get("Size-1"))
             p.height = int(geninfo.get("Size-2"))
-            
+
         proc = process_images(p)
+        if rotate:
+            for i in range(len(proc.images)):
+                image_copy = image_cropped.copy()
+                proc.images[i] = proc.images[i].rotate(int(faces_info[index]["angle"])-90)
+                w1, h1 = image_cropped.size
+                w2, h2 = proc.images[i].size
+                x = (w1 - w2) // 2
+                y = (h1 - h2) // 2
+                image_copy.paste(proc.images[i], (x, y))
+                proc.images[i] = image_copy
+        generatedImages.append(proc.images)
 
-        for n in range(p.n_iter * p.batch_size):
-            info = infotext(p)
+        image = imageOriginal
 
-            if pathToSave != "":
-                if opts.samples_format == "png":
-                    images.save_image(proc.images[n], pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(n+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
-                elif image.mode != 'RGB':
-                    image = image.convert('RGB')
-                    images.save_image(proc.images[n], pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(n+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
-                else:
-                    images.save_image(proc.images[n], pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(n+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
+    for j in range(p.n_iter * p.batch_size):
+        image = imageOriginal
+        for k in range(len(generatedImages)):
+            mask = Image.fromarray(masks[k])
+            mask = mask.filter(ImageFilter.GaussianBlur(p.mask_blur))
+            image = apply_overlay(generatedImages[k][j], paste_to[k], image, mask)
+
+        info = infotext(p)
+
+        if pathToSave != "":
+            if opts.samples_format == "png":
+                images.save_image(image, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
+            elif image.mode != 'RGB':
+                image = image.convert('RGB')
+                images.save_image(image, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
             else:
-                if opts.samples_format == "png":
-                    images.save_image(proc.images[n], opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(n+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
-                elif image.mode != 'RGB':
-                    image = image.convert('RGB')
-                    images.save_image(proc.images[n], opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(n+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
-                else:
-                    images.save_image(proc.images[n], opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(n+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
-
-            finishedImages.append(proc.images[n])
-    else:
-        generatedImages = []
-        paste_to = []
-        imageOriginal = image
-        overlay_image = image
-
-        for n, mask in enumerate(masks):
-            mask = Image.fromarray(masks[n])
-            if invertMask:
-                mask = ImageOps.invert(mask)
-
-            image_masked = Image.new('RGBa', (image.width, image.height))
-            image_masked.paste(overlay_image.convert("RGBA").convert("RGBa"), mask=ImageOps.invert(mask.convert('L')))
-
-            overlay_image = image_masked.convert('RGBA')
-
-            crop_region = masking.get_crop_region(np.array(mask), p.inpaint_full_res_padding)
-            crop_region = masking.expand_crop_region(crop_region, p.width, p.height, mask.width, mask.height)
-            x1, y1, x2, y2 = crop_region
-            paste_to.append((x1, y1, x2-x1, y2-y1))
-
-            mask = mask.crop(crop_region)
-            image_mask = images.resize_image(2, mask, p.width, p.height)
-
-            image = image.crop(crop_region)
-            image = images.resize_image(2, image, p.width, p.height)
-
-            p.init_images = [image]
-            p.image_mask = image_mask
-
-            if geninfo != "":
-                p.prompt = str(geninfo.get("Prompt"))
-                p.negative_prompt = str(geninfo.get("Negative prompt"))
-                p.steps = int(geninfo.get("Steps"))
-                p.sampler_name = str(geninfo.get("Sampler"))
-                p.cfg_scale = float(geninfo.get("CFG scale"))
-                p.seed = int(geninfo.get("Seed"))
-                p.width = int(geninfo.get("Size-1"))
-                p.height = int(geninfo.get("Size-2"))
-
-            proc = process_images(p)
-            generatedImages.append(proc.images)
-
-            image = imageOriginal
-
-        for j in range(p.n_iter * p.batch_size):
-            image = imageOriginal
-            for k in range(len(generatedImages)):
-                mask = Image.fromarray(masks[k])
-                mask = mask.filter(ImageFilter.GaussianBlur(p.mask_blur))
-                image = apply_overlay(generatedImages[k][j], paste_to[k], image, mask)
-
-            info = infotext(p)
-
-            if pathToSave != "":
-                if opts.samples_format == "png":
-                    images.save_image(image, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
-                elif image.mode != 'RGB':
-                    image = image.convert('RGB')
-                    images.save_image(image, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
-                else:
-                    images.save_image(image, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
+                images.save_image(image, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
+        else:
+            if opts.samples_format == "png":
+                images.save_image(image, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
+            elif image.mode != 'RGB':
+                image = image.convert('RGB')
+                images.save_image(image, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
             else:
-                if opts.samples_format == "png":
-                    images.save_image(image, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
-                elif image.mode != 'RGB':
-                    image = image.convert('RGB')
-                    images.save_image(image, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
-                else:
-                    images.save_image(image, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
+                images.save_image(image, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
 
-            finishedImages.append(image)
+        finishedImages.append(image)
 
-        p.do_not_save_samples = False
+    p.do_not_save_samples = False
 
     return finishedImages
 
@@ -356,7 +381,7 @@ def generateImages(p, facecfg, path, searchSubdir, viewResults, divider, howSpli
                     skip = 0
                     image = Image.open(file)
                     width, height = image.size
-                    totalNumberOfFaces = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file, totalNumberOfFaces, singleMaskPerImage, countFaces, maskSize, skip)
+                    masks, totalNumberOfFaces, faces_info, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file, totalNumberOfFaces, singleMaskPerImage, countFaces, maskSize, skip)
 
             if not onlyMask and countFaces:
                 print(f"\nWill process {len(allFiles)} images, found {totalNumberOfFaces} faces, generating {p.n_iter * p.batch_size} new images for each.")
@@ -405,7 +430,7 @@ def generateImages(p, facecfg, path, searchSubdir, viewResults, divider, howSpli
                         p.mask_blur = int(math.ceil(0.01*height))
 
                 skip = 0
-                masks, totalNumberOfFaces, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file, totalNumberOfFaces, singleMaskPerImage, countFaces, maskSize, skip)
+                masks, totalNumberOfFaces, faces_info, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file, totalNumberOfFaces, singleMaskPerImage, countFaces, maskSize, skip)
 
                 if facecfg.debugSave:
                     faceDebug(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info)
@@ -440,7 +465,7 @@ def generateImages(p, facecfg, path, searchSubdir, viewResults, divider, howSpli
                     continue
 
                 if not onlyMask:
-                    finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info, selectedTab, geninfo)
+                    finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info, selectedTab, geninfo, faces_info)
 
                 if not viewResults:
                     finishedImages = []
@@ -464,7 +489,7 @@ def generateImages(p, facecfg, path, searchSubdir, viewResults, divider, howSpli
             if countFaces:
                 print("\nCounting faces...")
                 skip = 0
-                totalNumberOfFaces = findFaces(image, width, height, divider, onlyHorizontal, onlyVertical, None, totalNumberOfFaces, singleMaskPerImage, countFaces, maskSize, skip)
+                masks, totalNumberOfFaces, faces_info, skip = findFaces(image, width, height, divider, onlyHorizontal, onlyVertical, None, totalNumberOfFaces, singleMaskPerImage, countFaces, maskSize, skip)
 
             if not onlyMask and countFaces:
                 print(f"\nWill process {len(p.init_images)} images, found {totalNumberOfFaces} faces, generating {p.n_iter * p.batch_size} new images for each.")
@@ -488,7 +513,7 @@ def generateImages(p, facecfg, path, searchSubdir, viewResults, divider, howSpli
                     p.mask_blur = int(math.ceil(0.01*height))
 
             skip = 0
-            masks, totalNumberOfFaces, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, None, totalNumberOfFaces, singleMaskPerImage, countFaces, maskSize, skip)
+            masks, totalNumberOfFaces, faces_info, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, None, totalNumberOfFaces, singleMaskPerImage, countFaces, maskSize, skip)
             if facecfg.debugSave:
                 faceDebug(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info)
 
@@ -522,7 +547,7 @@ def generateImages(p, facecfg, path, searchSubdir, viewResults, divider, howSpli
                 state.skipped = True
 
             if not onlyMask:
-                finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info, selectedTab, geninfo)
+                finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info, selectedTab, geninfo, faces_info)
 
             if wasCountFaces == True:
                 countFaces = True
@@ -567,7 +592,7 @@ def generateImages(p, facecfg, path, searchSubdir, viewResults, divider, howSpli
                 if overrideMaskBlur == True:
                     p.mask_blur = int(math.ceil(0.01*height))
 
-                finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSaveExisting, info, selectedTab)
+                finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSaveExisting, info, selectedTab, faces_info)
 
                 if not viewResults:
                     finishedImages = []
@@ -614,7 +639,7 @@ class Script(scripts.Script):
                 width, height = image.size
 
                 # if len(masks)==0 and path != '':
-                masks, totalNumberOfFaces, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file=None, totalNumberOfFaces=totalNumberOfFaces, singleMaskPerImage=True, countFaces=False, maskSize=maskSize, skip=0)
+                masks, totalNumberOfFaces, faces_info, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file=None, totalNumberOfFaces=totalNumberOfFaces, singleMaskPerImage=True, countFaces=False, maskSize=maskSize, skip=0)
 
                 mask = masks[0]
 
@@ -649,7 +674,7 @@ class Script(scripts.Script):
                 width, height = image.size
 
                 # if len(masks)==0 and path != '':
-                masks, totalNumberOfFaces, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file=None, totalNumberOfFaces=totalNumberOfFaces, singleMaskPerImage=True, countFaces=False, maskSize=maskSize, skip=0)
+                masks, totalNumberOfFaces, faces_info, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file=None, totalNumberOfFaces=totalNumberOfFaces, singleMaskPerImage=True, countFaces=False, maskSize=maskSize, skip=0)
 
                 mask = masks[0]
 
@@ -677,7 +702,7 @@ class Script(scripts.Script):
                 width, height = image.size
 
                 # if len(masks)==0 and path != '':
-                masks, totalNumberOfFaces, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file=None, totalNumberOfFaces=totalNumberOfFaces, singleMaskPerImage=True, countFaces=False, maskSize=maskSize, skip=0)
+                masks, totalNumberOfFaces, faces_info, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file=None, totalNumberOfFaces=totalNumberOfFaces, singleMaskPerImage=True, countFaces=False, maskSize=maskSize, skip=0)
 
                 mask = masks[0]
 

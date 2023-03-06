@@ -115,7 +115,8 @@ def getFacialLandmarks(image, facecfg):
 #
 
 # try to get landmarks for a face located at rect
-def getFacialLandmarkConvexHull(image, rect, facecfg):
+def getFacialLandmarkConvexHull(image, rect, faces_info, onlyHorizontal, divider, small_width, small_height, small_image_index, facecfg):
+    image = np.array(image)
     height, width, _ = image.shape
 
     # make a subimage to hand to FaceMesh
@@ -177,6 +178,7 @@ def getFacialLandmarkConvexHull(image, rect, facecfg):
     best_hull = None
     best_area = min_match_area
     for landmark in landmarks:
+        face_info = {}
         convexhull = cv2.convexHull(landmark)
         bounds = cv2.boundingRect(convexhull)
         # compute intersection with face_rect
@@ -185,9 +187,30 @@ def getFacialLandmarkConvexHull(image, rect, facecfg):
         x1 = min(face_rect[0] + face_rect[2], bounds[0] + bounds[2])
         y1 = min(face_rect[1] + face_rect[3], bounds[1] + bounds[3])
         area = (x1-x0) * (y1-y0)
+
         if area > best_area:
             best_area = area
             best_hull = convexhull
+
+        x_chin = landmark[152][0]
+        y_chin = -landmark[152][1]
+        x_forehead = landmark[10][0]
+        y_forehead = -landmark[10][1]
+
+        deltaX = x_forehead - x_chin
+        deltaY = y_forehead - y_chin
+        
+        face_angle = math.atan2(deltaY, deltaX) * 180 / math.pi
+        if onlyHorizontal == True:
+            x = (small_image_index // (divider) * small_width) + landmark[0][0]
+            y = (small_image_index % (divider) * small_height) + landmark[0][1]
+        else:
+            x = (small_image_index % (divider) * small_width) + landmark[0][0]
+            y = (small_image_index // (divider) * small_height) + landmark[0][1]
+        face_center = (x + subrect_x0, y + subrect_y0)
+        face_info["angle"] = face_angle
+        face_info["center"] = face_center
+        faces_info.append(face_info)
 
     if best_hull is not None:
         # translate the convex hull back into the coordinate space of the passed-in image
@@ -195,7 +218,7 @@ def getFacialLandmarkConvexHull(image, rect, facecfg):
             best_hull[i][0][0] += subrect_x0
             best_hull[i][0][1] += subrect_y0
 
-    return best_hull
+    return best_hull, faces_info
 
 def contractRect(r):
     (x0,y0,w,h) = r
