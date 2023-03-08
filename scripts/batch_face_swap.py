@@ -245,7 +245,7 @@ def faceDebug(p, masks, image, finishedImages, invertMask, forced_filename, path
 
     debugsave(overlay_image)
 
-def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info, selectedTab, geninfo, faces_info):
+def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info, selectedTab, geninfo, faces_info, rotation_threshold):
     p.do_not_save_samples = True
     generatedImages = []
     paste_to = []
@@ -281,7 +281,7 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
         image = images.resize_image(2, image, p.width, p.height)
         image_cropped = image
 
-        rotation_threshold = 20
+        rotation_threshold = rotation_threshold
         if 90+rotation_threshold > faces_info[index]["angle"] and 90-rotation_threshold < faces_info[index]["angle"]:
             pass
         else:
@@ -350,7 +350,7 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
 
     return finishedImages
 
-def generateImages(p, facecfg, path, searchSubdir, viewResults, divider, howSplit, saveMask, pathToSave, onlyMask, saveNoFace, overrideDenoising, overrideMaskBlur, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab, loadGenParams):
+def generateImages(p, facecfg, path, searchSubdir, viewResults, divider, howSplit, saveMask, pathToSave, onlyMask, saveNoFace, overrideDenoising, overrideMaskBlur, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab, loadGenParams, rotation_threshold):
     suffix = ''
     info = infotext(p)
     if selectedTab == "generateMasksTab":
@@ -467,7 +467,7 @@ def generateImages(p, facecfg, path, searchSubdir, viewResults, divider, howSpli
                     continue
 
                 if not onlyMask:
-                    finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info, selectedTab, geninfo, faces_info)
+                    finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info, selectedTab, geninfo, faces_info, rotation_threshold)
 
                 if not viewResults:
                     finishedImages = []
@@ -551,7 +551,7 @@ def generateImages(p, facecfg, path, searchSubdir, viewResults, divider, howSpli
                 state.skipped = True
 
             if not onlyMask:
-                finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info, selectedTab, geninfo, faces_info)
+                finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info, selectedTab, geninfo, faces_info, rotation_threshold)
 
             if wasCountFaces == True:
                 countFaces = True
@@ -596,7 +596,7 @@ def generateImages(p, facecfg, path, searchSubdir, viewResults, divider, howSpli
                 if overrideMaskBlur == True:
                     p.mask_blur = int(math.ceil(0.01*height))
 
-                finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSaveExisting, info, selectedTab, faces_info)
+                finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSaveExisting, info, selectedTab, faces_info, rotation_threshold)
 
                 if not viewResults:
                     finishedImages = []
@@ -760,7 +760,7 @@ class Script(scripts.Script):
                         minFace = gr.Slider(minimum=10, maximum=200, step=1  , value=30, label="Minimum face size in pixels")
 
                 with gr.Column(variant='panel'):
-                    htmlTip1 = gr.HTML("<p>Activate the 'Masks only' checkbox to see how many faces do your current settings detect without generating SD image. (check console)</p><p>You can also save generated masks to disk. Only possible with 'Masks only' (if you leave path empty, it will save the masks to your default webui outputs directory)</p><p>'Single mask per image' is only recommended with 'Invert mask' or if you want to save one mask per image, not per face. If you activate it without inverting mask, and try to process an image with multiple faces, it will generate only one image for all faces, producing bad results.</p>",visible=False)
+                    htmlTip1 = gr.HTML("<p>Activate the 'Masks only' checkbox to see how many faces do your current settings detect without generating SD image. (check console)</p><p>You can also save generated masks to disk. Only possible with 'Masks only' (if you leave path empty, it will save the masks to your default webui outputs directory)</p><p>'Single mask per image' is only recommended with 'Invert mask' or if you want to save one mask per image, not per face. If you activate it without inverting mask, and try to process an image with multiple faces, it will generate only one image for all faces, producing bad results.</p><p>'Rotation threshold', if the face is rotated at an angle higher than this value, it will be automatically rotated so it's upright before generating, producing much better results.</p>",visible=False)
                     # Settings
                     with gr.Column(variant='panel'):
                         gr.HTML("<p style=\"margin-top:0.10em;font-size:1.5em\">Settings:</p>")
@@ -771,6 +771,8 @@ class Script(scripts.Script):
                             with gr.Row():
                                 invertMask = gr.Checkbox(value=False, label="Invert mask", visible=True)
                                 singleMaskPerImage = gr.Checkbox(value=False, label="Single mask per image", visible=True)
+                            with gr.Row(variant='panel'):
+                                rotation_threshold = gr.Slider(minimum=0, maximum=180, step=1, value=20, label="Rotation threshold")
 
                 # Path to images
                 with gr.Column(variant='panel'):
@@ -876,9 +878,9 @@ class Script(scripts.Script):
         showTips.change(switchTipsVisibility, showTips, htmlTip5)
         showTips.change(switchTipsVisibility, showTips, htmlTip6)
 
-        return [overrideDenoising, overrideMaskBlur, path, searchSubdir, divider, howSplit, saveMask, pathToSave, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect, loadGenParams]
+        return [overrideDenoising, overrideMaskBlur, path, searchSubdir, divider, howSplit, saveMask, pathToSave, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect, loadGenParams, rotation_threshold]
 
-    def run(self, p, overrideDenoising, overrideMaskBlur, path, searchSubdir, divider, howSplit, saveMask, pathToSave, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect, loadGenParams):
+    def run(self, p, overrideDenoising, overrideMaskBlur, path, searchSubdir, divider, howSplit, saveMask, pathToSave, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect, loadGenParams, rotation_threshold):
         wasGrid = p.do_not_save_grid
         wasInpaintFullRes = p.inpaint_full_res
 
@@ -888,7 +890,7 @@ class Script(scripts.Script):
         all_images = []
 
         facecfg = FaceDetectConfig(faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect)
-        finishedImages = generateImages(p, facecfg, path, searchSubdir, viewResults, int(divider), howSplit, saveMask, pathToSave, onlyMask, saveNoFace, overrideDenoising, overrideMaskBlur, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab, loadGenParams)
+        finishedImages = generateImages(p, facecfg, path, searchSubdir, viewResults, int(divider), howSplit, saveMask, pathToSave, onlyMask, saveNoFace, overrideDenoising, overrideMaskBlur, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab, loadGenParams, rotation_threshold)
 
         if not viewResults:
             finishedImages = []
