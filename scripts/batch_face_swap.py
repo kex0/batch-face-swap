@@ -448,7 +448,9 @@ def generateImages(p, facecfg, path, searchSubdir, viewResults, divider, howSpli
                             mask = ImageOps.invert(mask)
                         finishedImages.append(mask)
 
-                        if saveMask:
+                        if saveMask and skip != 1:
+                            custom_save_image(p, mask, pathToSave, forced_filename, suffix, info)
+                        elif saveMask and skip == 1 and saveNoFace:
                             custom_save_image(p, mask, pathToSave, forced_filename, suffix, info)
 
                 # If face was not found but user wants to save images without face
@@ -531,7 +533,9 @@ def generateImages(p, facecfg, path, searchSubdir, viewResults, divider, howSpli
                         mask = ImageOps.invert(mask)
                     finishedImages.append(mask)
 
-                    if saveMask:
+                    if saveMask and skip != 1:
+                        custom_save_image(p, mask, pathToSave, forced_filename, suffix, info)
+                    elif saveMask and skip == 1 and saveNoFace:
                         custom_save_image(p, mask, pathToSave, forced_filename, suffix, info)
 
 
@@ -818,7 +822,7 @@ class Script(scripts.Script):
                 gr.HTML("<p style=\"margin-top:0.10em;font-size:1.5em\">General:</p>")
                 htmlTip6 = gr.HTML("<p>Activate 'Show results in WebUI' checkbox to see results in the WebUI at the end (not recommended when processing a large number of images)</p>",visible=False)
                 with gr.Row():
-                    viewResults = gr.Checkbox(value=False, label="Show results in WebUI")
+                    viewResults = gr.Checkbox(value=True, label="Show results in WebUI")
                     showTips = gr.Checkbox(value=False, label="Show tips")
 
         # Face detect internals
