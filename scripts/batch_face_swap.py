@@ -296,10 +296,8 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
         if geninfo != "":
             p.prompt = str(geninfo.get("Prompt"))
             p.negative_prompt = str(geninfo.get("Negative prompt"))
-            p.steps = int(geninfo.get("Steps"))
             p.sampler_name = str(geninfo.get("Sampler"))
             p.cfg_scale = float(geninfo.get("CFG scale"))
-            p.seed = int(geninfo.get("Seed"))
             p.width = int(geninfo.get("Size-1"))
             p.height = int(geninfo.get("Size-2"))
 
