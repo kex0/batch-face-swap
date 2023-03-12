@@ -81,6 +81,8 @@ def findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertic
                 deltaY = y_forehead - y_chin
                 
                 face_angle = math.atan2(deltaY, deltaX) * 180 / math.pi
+
+                # convert to global coordinates in case the image was split
                 if onlyHorizontal == True:
                     x = (i // (divider) * small_width) + landmark[0][0]
                     y = (i % (divider) * small_height) + landmark[0][1]
@@ -247,6 +249,7 @@ def faceDebug(p, masks, image, finishedImages, invertMask, forced_filename, path
 
 def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info, selectedTab, geninfo, faces_info, rotation_threshold):
     p.do_not_save_samples = True
+    index = 0
     generatedImages = []
     paste_to = []
     imageOriginal = image
@@ -256,39 +259,42 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
         rotate = False
         mask = Image.fromarray(masks[n])
         if invertMask:
-            mask = ImageOps.invert(mask)
-
-        image_masked = Image.new('RGBa', (image.width, image.height))
-        image_masked.paste(overlay_image.convert("RGBA").convert("RGBa"), mask=ImageOps.invert(mask.convert('L')))
-
-        overlay_image = image_masked.convert('RGBA')
-
-        crop_region = masking.get_crop_region(np.array(mask), p.inpaint_full_res_padding)
-        crop_region = masking.expand_crop_region(crop_region, p.width, p.height, mask.width, mask.height)
-        x1, y1, x2, y2 = crop_region
-        paste_to.append((x1, y1, x2-x1, y2-y1))
-
-        for i in range(len(faces_info)):
-            pixel_color = mask.getpixel((faces_info[i]["center"][0],faces_info[i]["center"][1]))
-            if pixel_color == 255:
-                index = i
-                break
-
-        mask = mask.crop(crop_region)
-        image_mask = images.resize_image(2, mask, p.width, p.height)
-
-        image = image.crop(crop_region)
-        image = images.resize_image(2, image, p.width, p.height)
-        image_cropped = image
-
-        rotation_threshold = rotation_threshold
-        if 90+rotation_threshold > faces_info[index]["angle"] and 90-rotation_threshold < faces_info[index]["angle"]:
-            pass
+            image_mask = ImageOps.invert(mask)
         else:
-            angle_difference = (90-int(faces_info[index]["angle"]) + 360) % 360
-            image = image.rotate(angle_difference, expand=True)
-            image_mask = image_mask.rotate(angle_difference, expand=True)
-            rotate = True
+            image_masked = Image.new('RGBa', (image.width, image.height))
+            image_masked.paste(overlay_image.convert("RGBA").convert("RGBa"), mask=ImageOps.invert(mask.convert('L')))
+
+            overlay_image = image_masked.convert('RGBA')
+
+            crop_region = masking.get_crop_region(np.array(mask), p.inpaint_full_res_padding)
+            crop_region = masking.expand_crop_region(crop_region, p.width, p.height, mask.width, mask.height)
+            x1, y1, x2, y2 = crop_region
+            paste_to.append((x1, y1, x2-x1, y2-y1))
+            
+            for i in range(len(faces_info)):
+                try:
+                    pixel_color = mask.getpixel((faces_info[i]["center"][0],faces_info[i]["center"][1]))
+                except IndexError:
+                    pixel_color = 0
+                if pixel_color == 255:
+                    index = i
+                    break
+
+            mask = mask.crop(crop_region)
+            image_mask = images.resize_image(2, mask, p.width, p.height)
+
+            image = image.crop(crop_region)
+            image = images.resize_image(2, image, p.width, p.height)
+            image_cropped = image
+
+            rotation_threshold = rotation_threshold
+            if 90+rotation_threshold > faces_info[index]["angle"] and 90-rotation_threshold < faces_info[index]["angle"]:
+                pass
+            else:
+                angle_difference = (90-int(faces_info[index]["angle"]) + 360) % 360
+                image = image.rotate(angle_difference, expand=True)
+                image_mask = image_mask.rotate(angle_difference, expand=True)
+                rotate = True
 
         p.init_images = [image]
         p.image_mask = image_mask
@@ -302,6 +308,7 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
             p.height = int(geninfo.get("Size-2"))
 
         proc = process_images(p)
+
         if rotate:
             for i in range(len(proc.images)):
                 image_copy = image_cropped.copy()
@@ -314,14 +321,15 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
                 proc.images[i] = image_copy
         generatedImages.append(proc.images)
 
-        image = imageOriginal
-
     for j in range(p.n_iter * p.batch_size):
-        image = imageOriginal
-        for k in range(len(generatedImages)):
-            mask = Image.fromarray(masks[k])
-            mask = mask.filter(ImageFilter.GaussianBlur(p.mask_blur))
-            image = apply_overlay(generatedImages[k][j], paste_to[k], image, mask)
+        if not invertMask:
+            image = imageOriginal
+            for k in range(len(generatedImages)):
+                mask = Image.fromarray(masks[k])
+                mask = mask.filter(ImageFilter.GaussianBlur(p.mask_blur))
+                image = apply_overlay(generatedImages[k][j], paste_to[k], image, mask)
+        else:
+            image = proc.images[j]
 
         info = infotext(p)
 
