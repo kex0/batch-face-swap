@@ -609,6 +609,189 @@ def generateImages(p, facecfg, path, searchSubdir, viewResults, divider, howSpli
 
     return finishedImages
 
+def generateImages2(p, facecfg, path, searchSubdir, viewResults, divider, howSplit, saveMask, pathToSave, onlyMask, saveNoFace, overrideDenoising, overrideMaskBlur, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab, loadGenParams, rotation_threshold):
+    suffix = ''
+    info = infotext(p)
+    if selectedTab == "generateMasksTab":
+        finishedImages = []
+        wasCountFaces = False
+        totalNumberOfFaces = 0
+        allFiles = []
+        geninfo = ""
+
+        if howSplit == "Horizontal only ▤":
+            onlyHorizontal = True
+            onlyVertical = False
+        elif howSplit == "Vertical only ▥":
+            onlyHorizontal = False
+            onlyVertical = True
+        elif howSplit == "Both ▦":
+            onlyHorizontal = False
+            onlyVertical = False
+
+        # if neither path nor image, we're done
+        if path == '' and p.init_images[0] is None:
+           return finishedImages
+
+        # flag whether we're processing a directory or a specified image
+        # (the code after this supports multiple images in an array, but the UI only allows a single image)
+        usingFilenames = (path != '')
+        if usingFilenames:
+            allFiles = listFiles(path, searchSubdir, allFiles)
+        else:
+            allFiles = [ p.initImages[0] ]
+
+        start_time = time.thread_time()
+
+        if countFaces:
+            print("\nCounting faces...")
+            for i, file in enumerate(allFiles):
+                skip = 0
+                image = Image.open(file) if usingFilenames else file
+                width, height = image.size
+                masks, totalNumberOfFaces, faces_info, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file, totalNumberOfFaces, singleMaskPerImage, countFaces, maskSize, skip)
+
+        if not onlyMask and countFaces:
+            print(f"\nWill process {len(allFiles)} images, found {totalNumberOfFaces} faces, generating {p.n_iter * p.batch_size} new images for each.")
+            state.job_count = totalNumberOfFaces * p.n_iter
+        elif not onlyMask and not countFaces:
+            print(f"\nWill process {len(allFiles)} images, generating {p.n_iter * p.batch_size} new images for each.")
+            state.job_count = len(allFiles) * p.n_iter
+
+        for i, file in enumerate(allFiles):
+            if usingFilenames and keepOriginalName:
+                forced_filename = os.path.splitext(os.path.basename(file))[0]
+            else:
+                forced_filename = None
+
+            if countFaces:
+                state.job = f"{i+1} out of {totalNumberOfFaces}"
+                totalNumberOfFaces = 0
+                wasCountFaces = True
+                countFaces = False
+            else:
+                state.job = f"{i+1} out of {len(allFiles)}"
+
+            if state.skipped:
+                state.skipped = False
+            if state.interrupted and onlyMask:
+                state.interrupted = False
+            elif state.interrupted:
+                break
+
+            try:
+                image = Image.open(file) if usingFilenames else file
+                width, height = image.size
+
+                if loadGenParams:
+                    geninfo, _ = read_info_from_image(image)
+                    geninfo = generation_parameters_copypaste.parse_generation_parameters(geninfo)
+
+            except UnidentifiedImageError:
+                print(f"\nUnable to open {file}, skipping")
+                continue
+
+            if not onlyMask:
+                if overrideDenoising == True:
+                    p.denoising_strength = 0.5
+                if overrideMaskBlur == True:
+                    p.mask_blur = int(math.ceil(0.01*height))
+
+            skip = 0
+            masks, totalNumberOfFaces, faces_info, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file, totalNumberOfFaces, singleMaskPerImage, countFaces, maskSize, skip)
+
+            if facecfg.debugSave:
+                faceDebug(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info)
+
+
+            # Only generate mask
+            if onlyMask:
+                suffix = '_mask'
+
+                # Load mask
+                for i, mask in enumerate(masks):
+                    mask = Image.fromarray(mask)
+
+                    # Invert mask if needed
+                    if invertMask:
+                        mask = ImageOps.invert(mask)
+                    finishedImages.append(mask)
+
+                    if saveMask and skip != 1:
+                        custom_save_image(p, mask, pathToSave, forced_filename, suffix, info)
+                    elif saveMask and skip == 1 and saveNoFace:
+                        custom_save_image(p, mask, pathToSave, forced_filename, suffix, info)
+
+            # If face was not found but user wants to save images without face
+            if skip == 1 and saveNoFace and not onlyMask:
+                custom_save_image(p, image, pathToSave, forced_filename, suffix, info)
+
+                finishedImages.append(image)
+                state.skipped = True
+                continue
+
+            # If face was not found, just skip
+            if skip == 1:
+                state.skipped = True
+                continue
+
+            if not onlyMask:
+                finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info, selectedTab, geninfo, faces_info, rotation_threshold)
+
+            if usingFilenames and not viewResults:
+                finishedImages = []
+
+        if wasCountFaces == True:
+            countFaces = True
+
+        timing = time.thread_time() - start_time
+        print(f"Found {totalNumberOfFaces} faces in {len(allFiles)} images in {timing} seconds.")
+
+# EXISTING MASKS
+    elif selectedTab == "existingMasksTab":
+        finishedImages = []
+        allImages = []
+        allMasks = []
+        searchSubdir = False
+
+        if pathExisting != '' and pathMasksExisting != '':
+            allImages = listFiles(pathExisting, searchSubdir, allImages)
+            allMasks = listFiles(pathMasksExisting, searchSubdir, allMasks)
+
+            print(f"\nWill process {len(allImages)} images, generating {p.n_iter * p.batch_size} new images for each.")
+            state.job_count = len(allImages) * p.n_iter
+            for i, file in enumerate(allImages):
+                forced_filename = os.path.splitext(os.path.basename(file))[0]
+
+                state.job = f"{i+1} out of {len(allImages)}"
+
+                if state.skipped:
+                    state.skipped = False
+                elif state.interrupted:
+                    break
+
+                try:
+                    image = Image.open(file)
+                    width, height = image.size
+
+                    masks = []
+                    masks.append(Image.open(os.path.join(pathMasksExisting, os.path.splitext(os.path.basename(file))[0])+os.path.splitext(allMasks[i])[1]))
+                except UnidentifiedImageError:
+                    print(f"\nUnable to open {file}, skipping")
+                    continue
+
+                if overrideDenoising == True:
+                    p.denoising_strength = 0.5
+                if overrideMaskBlur == True:
+                    p.mask_blur = int(math.ceil(0.01*height))
+
+                finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSaveExisting, info, selectedTab, faces_info, rotation_threshold)
+
+                if not viewResults:
+                    finishedImages = []
+
+    return finishedImages
+
 class Script(scripts.Script):
     def title(self):
         return "Batch Face Swap"
