@@ -320,6 +320,7 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
                 image_copy.paste(proc.images[i], (x, y))
                 proc.images[i] = image_copy
         generatedImages.append(proc.images)
+        image = imageOriginal
 
     for j in range(p.n_iter * p.batch_size):
         if not invertMask:
