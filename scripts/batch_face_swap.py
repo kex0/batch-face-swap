@@ -72,34 +72,15 @@ def findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertic
                 bounds = cv2.boundingRect(convexhull)
                 known_face_rects.append(list(bounds)) # convert tuple to array for consistency
 
-                x_chin = landmark[152][0]
-                y_chin = -landmark[152][1]
-                x_forehead = landmark[10][0]
-                y_forehead = -landmark[10][1]
-
-                deltaX = x_forehead - x_chin
-                deltaY = y_forehead - y_chin
-                
-                face_angle = math.atan2(deltaY, deltaX) * 180 / math.pi
-
-                # convert to global coordinates in case the image was split
-                if onlyHorizontal == True:
-                    x = (i // (divider) * small_width) + landmark[0][0]
-                    y = (i % (divider) * small_height) + landmark[0][1]
-                else:
-                    x = (i % (divider) * small_width) + landmark[0][0]
-                    y = (i // (divider) * small_height) + landmark[0][1]
-                face_center = (x, y)
-                face_info["angle"] = face_angle
-                face_info["center"] = face_center
-                faces_info.append(face_info)
+                faces_info.append(computeFaceInfo(landmark, onlyHorizontal, divider, small_width, small_height, small_image_index))
 
             faceRects = getFaceRectangles(small_image, known_face_rects, facecfg)
 
             for rect in faceRects:
-                landmarkHull, faces_info = getFacialLandmarkConvexHull(image, rect, faces_info, onlyHorizontal, divider, small_width, small_height, small_image_index, facecfg)
+                landmarkHull, face_info = getFacialLandmarkConvexHull(image, rect, onlyHorizontal, divider, small_width, small_height, small_image_index, facecfg)
                 if landmarkHull is not None:
                     faces.append(landmarkHull)
+                    faces_info.append(face_info)
                 else:
                     rejected += 1
 
@@ -122,26 +103,7 @@ def findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertic
                 face_info = {}
                 convexhull = cv2.convexHull(landmark)
                 faces.append(convexhull)
-
-                x_chin = landmark[152][0]
-                y_chin = -landmark[152][1]
-                x_forehead = landmark[10][0]
-                y_forehead = -landmark[10][1]
-
-                deltaX = x_forehead - x_chin
-                deltaY = y_forehead - y_chin
-                
-                face_angle = math.atan2(deltaY, deltaX) * 180 / math.pi
-                if onlyHorizontal == True:
-                    x = (i // (divider) * small_width) + landmark[0][0]
-                    y = (i % (divider) * small_height) + landmark[0][1]
-                else:
-                    x = (i % (divider) * small_width) + landmark[0][0]
-                    y = (i // (divider) * small_height) + landmark[0][1]
-                face_center = (x, y)
-                face_info["angle"] = face_angle
-                face_info["center"] = face_center
-                faces_info.append(face_info)
+                faces_info.append(computeFaceInfo(landmark, onlyHorizontal, divider, small_width, small_height, small_image_index))
 
         if len(faces) == 0:
             small_image[:] = (0, 0, 0)
