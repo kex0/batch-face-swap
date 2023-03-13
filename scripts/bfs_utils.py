@@ -15,6 +15,9 @@ import cv2
 import sys
 import os
 
+def image_channels(image):
+    return image.shape[2] if image.ndim == 3 else 1
+
 def apply_overlay(image, paste_loc, imageOriginal, mask):
     x, y, w, h = paste_loc
     base_image = Image.new('RGBA', (imageOriginal.width, imageOriginal.height))

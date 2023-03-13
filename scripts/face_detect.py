@@ -134,7 +134,7 @@ def computeFaceInfo(landmark, onlyHorizontal, divider, small_width, small_height
 # try to get landmarks for a face located at rect
 def getFacialLandmarkConvexHull(image, rect, onlyHorizontal, divider, small_width, small_height, small_image_index, facecfg):
     image = np.array(image)
-    height, width, _ = image.shape
+    height, width, channels = image.shape
 
     # make a subimage to hand to FaceMesh
     (x,y,w,h) = rect
@@ -152,7 +152,7 @@ def getFacialLandmarkConvexHull(image, rect, onlyHorizontal, divider, small_widt
     subrect_x_center = face_center_x
     subrect_y_center = face_center_y
 
-    subimage = np.zeros((subrect_height, subrect_width, 3), np.uint8)
+    subimage = np.zeros((subrect_height, subrect_width, channels), np.uint8)
 
     # this is the coordinates of the top left of the subimage relative to the original image
     subrect_x0 = subrect_x_center - subrect_halfwidth
