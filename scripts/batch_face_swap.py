@@ -226,7 +226,7 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
 
             for i in range(len(faces_info)):
                 try:
-                    pixel_color = mask.getpixel((faces_info[i]["center"][0],faces_info[i]["center"][1]))
+                    pixel_color = mask.getpixel((faces_info[i].center[0],faces_info[i].center[1]))
                 except IndexError:
                     pixel_color = 0
                 if pixel_color == 255:
@@ -241,10 +241,10 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
             image_cropped = image
 
             rotation_threshold = rotation_threshold
-            if 90+rotation_threshold > faces_info[index]["angle"] and 90-rotation_threshold < faces_info[index]["angle"]:
+            if 90+rotation_threshold > faces_info[index].angle and 90-rotation_threshold < faces_info[index].angle:
                 pass
             else:
-                angle_difference = (90-int(faces_info[index]["angle"]) + 360) % 360
+                angle_difference = (90-int(faces_info[index].angle) + 360) % 360
                 image = image.rotate(angle_difference, expand=True)
                 image_mask = image_mask.rotate(angle_difference, expand=True)
                 rotate = True
@@ -265,7 +265,7 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
         if rotate:
             for i in range(len(proc.images)):
                 image_copy = image_cropped.copy()
-                proc.images[i] = proc.images[i].rotate(int(faces_info[index]["angle"])-90)
+                proc.images[i] = proc.images[i].rotate(int(faces_info[index].angle)-90)
                 w1, h1 = image_cropped.size
                 w2, h2 = proc.images[i].size
                 x = (w1 - w2) // 2

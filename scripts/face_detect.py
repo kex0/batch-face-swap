@@ -110,6 +110,11 @@ def getFacialLandmarks(image, facecfg):
 
         return facelandmarks
 
+class FaceInfo():
+    def __init__(self, center, rotation):
+        self.center = center
+        self.angle = rotation
+
 def computeFaceInfo(landmark, onlyHorizontal, divider, small_width, small_height, small_image_index):
     x_chin = landmark[152][0]
     y_chin = -landmark[152][1]
@@ -129,7 +134,7 @@ def computeFaceInfo(landmark, onlyHorizontal, divider, small_width, small_height
         x = ((small_image_index %  divider) * small_width ) + landmark[0][0]
         y = ((small_image_index // divider) * small_height) + landmark[0][1]
 
-    return { "angle": face_angle, "center": (x,y) }
+    return FaceInfo((x,y), face_angle)
 
 # try to get landmarks for a face located at rect
 def getFacialLandmarkConvexHull(image, rect, onlyHorizontal, divider, small_width, small_height, small_image_index, facecfg):
@@ -221,7 +226,7 @@ def getFacialLandmarkConvexHull(image, rect, onlyHorizontal, divider, small_widt
 
         # compute face_info and translate it back into the coordinate space
         face_info = computeFaceInfo(best_landmark, onlyHorizontal, divider, small_width, small_height, small_image_index)
-        face_info["center"] = (face_info["center"][0] + subrect_x0, face_info["center"][1] + subrect_y0)
+        face_info.center = (face_info.center[0] + subrect_x0, face_info.center[1] + subrect_y0)
 
     return best_hull, face_info
 
