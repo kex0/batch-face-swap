@@ -30,16 +30,8 @@ def findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertic
     widthOriginal = width
 
     # Calculate the size of each small image
-    if onlyVertical == True:
-        small_width = math.ceil(width / divider)
-        small_height = height
-    elif onlyHorizontal == True:
-        small_width = width
-        small_height = math.ceil(height / divider)
-    else:
-        small_width = math.ceil(width / divider)
-        small_height = math.ceil(height / divider)
-
+    small_width  = width  if onlyHorizontal else math.ceil(width  / divider)
+    small_height = height if onlyVertical   else math.ceil(height / divider)
 
     # Divide the large image into a list of small images
     small_images = []
@@ -136,13 +128,13 @@ def findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertic
     # Paste the processed small images into the new image
     if onlyHorizontal == True:
         for i, processed_image in enumerate(processed_images):
-            x = i // (divider) * small_width
-            y = i % (divider) * small_height
+            x = (i // divider) * small_width
+            y = (i %  divider) * small_height
             new_image.paste(processed_image, (x, y))
     else:
         for i, processed_image in enumerate(processed_images):
-            x = i % (divider) * small_width
-            y = i // (divider) * small_height
+            x = (i %  divider) * small_width
+            y = (i // divider) * small_height
             new_image.paste(processed_image, (x, y))
 
     image = cv2.cvtColor(np.array(new_image), cv2.COLOR_RGB2BGR)
@@ -195,7 +187,6 @@ def faceDebug(p, masks, image, finishedImages, invertMask, forced_filename, path
     paste_to = []
     imageOriginal = image
     overlay_image = image
-    print( f"here, {len(masks)}" )
 
     for n, mask in enumerate(masks):
         mask = Image.fromarray(masks[n])
@@ -296,22 +287,10 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
 
         info = infotext(p)
 
-        if pathToSave != "":
-            if opts.samples_format == "png":
-                images.save_image(image, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
-            elif image.mode != 'RGB':
-                image = image.convert('RGB')
-                images.save_image(image, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
-            else:
-                images.save_image(image, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
-        else:
-            if opts.samples_format == "png":
-                images.save_image(image, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
-            elif image.mode != 'RGB':
-                image = image.convert('RGB')
-                images.save_image(image, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
-            else:
-                images.save_image(image, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename+"_"+str(j+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename)
+        final_forced_filename = forced_filename+"_"+str(j+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename
+        if opts.samples_format != "png" and image.mode != 'RGB':
+            image = image.convert('RGB')
+        images.save_image(image, pathToSave if pathToSave !="" else opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=final_forced_filename)
 
         finishedImages.append(image)
 
@@ -329,15 +308,8 @@ def generateImages(p, facecfg, path, searchSubdir, viewResults, divider, howSpli
         allFiles = []
         geninfo = ""
 
-        if howSplit == "Horizontal only ▤":
-            onlyHorizontal = True
-            onlyVertical = False
-        elif howSplit == "Vertical only ▥":
-            onlyHorizontal = False
-            onlyVertical = True
-        elif howSplit == "Both ▦":
-            onlyHorizontal = False
-            onlyVertical = False
+        onlyHorizontal = ("Horizontal" in howSplit)
+        onlyVertical   = ("Vertical" in howSplit)
 
     # RUN IF PATH IS INSERTED
         if path != '':
@@ -582,15 +554,8 @@ def generateImages2(p, facecfg, path, searchSubdir, viewResults, divider, howSpl
         allFiles = []
         geninfo = ""
 
-        if howSplit == "Horizontal only ▤":
-            onlyHorizontal = True
-            onlyVertical = False
-        elif howSplit == "Vertical only ▥":
-            onlyHorizontal = False
-            onlyVertical = True
-        elif howSplit == "Both ▦":
-            onlyHorizontal = False
-            onlyVertical = False
+        onlyHorizontal = ("Horizontal" in howSplit)
+        onlyVertical   = ("Vertical" in howSplit)
 
         # if neither path nor image, we're done
         if path == '' and p.init_images[0] is None:
@@ -602,7 +567,7 @@ def generateImages2(p, facecfg, path, searchSubdir, viewResults, divider, howSpl
         if usingFilenames:
             allFiles = listFiles(path, searchSubdir, allFiles)
         else:
-            allFiles = [ p.initImages[0] ]
+            allFiles = [ p.init_images[0] ]
 
         start_time = time.thread_time()
 
@@ -665,7 +630,6 @@ def generateImages2(p, facecfg, path, searchSubdir, viewResults, divider, howSpl
 
             if facecfg.debugSave:
                 faceDebug(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info)
-
 
             # Only generate mask
             if onlyMask:
@@ -765,9 +729,8 @@ class Script(scripts.Script):
     def ui(self, is_img2img):
 
         def updateVisualizer(searchSubdir: bool, howSplit: str, divider: int, maskSize: int, path: str, visualizationOpacity: int, faceMode: int):
-            # this is a huge pain to patch through so don't bother for now
 
-            facecfg = FaceDetectConfig(faceMode)
+            facecfg = FaceDetectConfig(faceMode) # this is a huge pain to patch through so don't bother
             allFiles = []
             totalNumberOfFaces = 0
 
