@@ -218,7 +218,10 @@ def getFacialLandmarkConvexHull(image, rect, onlyHorizontal, divider, small_widt
         for i in range(len(best_hull)):
             best_hull[i][0][0] += subrect_x0
             best_hull[i][0][1] += subrect_y0
+
+        # compute face_info and translate it back into the coordinate space
         face_info = computeFaceInfo(best_landmark, onlyHorizontal, divider, small_width, small_height, small_image_index)
+        face_info["center"] = (face_info["center"][0] + subrect_x0, face_info["center"][1] + subrect_y0)
 
     return best_hull, face_info
 

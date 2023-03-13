@@ -232,7 +232,7 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
             crop_region = masking.expand_crop_region(crop_region, p.width, p.height, mask.width, mask.height)
             x1, y1, x2, y2 = crop_region
             paste_to.append((x1, y1, x2-x1, y2-y1))
-            
+
             for i in range(len(faces_info)):
                 try:
                     pixel_color = mask.getpixel((faces_info[i]["center"][0],faces_info[i]["center"][1]))
