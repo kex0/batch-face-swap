@@ -402,7 +402,11 @@ def generateImages(p, facecfg, path, searchSubdir, viewResults, divider, howSpli
                     finishedImages.append(mask)
 
                     if saveMask and skip != 1:
-                        custom_save_image(p, mask, pathToSave, forced_filename, suffix, info)
+                        #custom_save_image(p, mask, pathToSave, forced_filename, suffix, info)
+                        mask = ImageOps.invert(mask)
+                        image_masked = Image.new('RGB', (image.width, image.height), "white")
+                        image_masked.paste(image,mask=ImageOps.invert(mask.convert('L')))
+                        custom_save_image(p, image_masked, pathToSave, forced_filename, suffix + 'image_masked', info)
                     elif saveMask and skip == 1 and saveNoFace:
                         custom_save_image(p, mask, pathToSave, forced_filename, suffix, info)
 
