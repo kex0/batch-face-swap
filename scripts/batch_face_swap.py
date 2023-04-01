@@ -182,7 +182,7 @@ def findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertic
     return masks, totalNumberOfFaces, faces_info, skip
 
 # generate debug image
-def faceDebug(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info):
+def faceDebug(p, masks, image, image_face, finishedImages, invertMask, forced_filename, pathToSave, info):
     generatedImages = []
     paste_to = []
     imageOriginal = image
@@ -200,7 +200,7 @@ def faceDebug(p, masks, image, finishedImages, invertMask, forced_filename, path
 
     debugsave(overlay_image)
 
-def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info, selectedTab, geninfo, faces_info, rotation_threshold):
+def faceSwap(p, masks, image, image_face, finishedImages, invertMask, forced_filename, pathToSave, info, selectedTab, geninfo, faces_info, rotation_threshold):
     p.do_not_save_samples = True
     index = 0
     generatedImages = []
@@ -240,14 +240,18 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
             image = images.resize_image(2, image, p.width, p.height)
             image_cropped = image
 
-            rotation_threshold = rotation_threshold
-            if 90+rotation_threshold > faces_info[index]["angle"] and 90-rotation_threshold < faces_info[index]["angle"]:
-                pass
-            else:
-                angle_difference = (90-int(faces_info[index]["angle"]) + 360) % 360
-                image = image.rotate(angle_difference, expand=True)
-                image_mask = image_mask.rotate(angle_difference, expand=True)
-                rotate = True
+            if selectedTab == "existingFacesTab":
+                image_face = images.resize_image(2, image_face, p.width, p.height)
+
+            if selectedTab != "existingFacesTab":
+                rotation_threshold = rotation_threshold
+                if 90+rotation_threshold > faces_info[index]["angle"] and 90-rotation_threshold < faces_info[index]["angle"]:
+                    pass
+                else:
+                    angle_difference = (90-int(faces_info[index]["angle"]) + 360) % 360
+                    image = image.rotate(angle_difference, expand=True)
+                    image_mask = image_mask.rotate(angle_difference, expand=True)
+                    rotate = True
 
         p.init_images = [image]
         p.image_mask = image_mask
@@ -260,30 +264,48 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
             p.width = int(geninfo.get("Size-1"))
             p.height = int(geninfo.get("Size-2"))
 
-        proc = process_images(p)
+        if selectedTab != "existingFacesTab":
+            proc = process_images(p)
 
-        if rotate:
-            for i in range(len(proc.images)):
-                image_copy = image_cropped.copy()
-                proc.images[i] = proc.images[i].rotate(int(faces_info[index]["angle"])-90)
-                w1, h1 = image_cropped.size
-                w2, h2 = proc.images[i].size
-                x = (w1 - w2) // 2
-                y = (h1 - h2) // 2
-                image_copy.paste(proc.images[i], (x, y))
-                proc.images[i] = image_copy
-        generatedImages.append(proc.images)
-        image = imageOriginal
-
-    for j in range(p.n_iter * p.batch_size):
-        if not invertMask:
+            if rotate:
+                for i in range(len(proc.images)):
+                    image_copy = image_cropped.copy()
+                    proc.images[i] = proc.images[i].rotate(int(faces_info[index]["angle"])-90)
+                    w1, h1 = image_cropped.size
+                    w2, h2 = proc.images[i].size
+                    x = (w1 - w2) // 2
+                    y = (h1 - h2) // 2
+                    image_copy.paste(proc.images[i], (x, y))
+                    proc.images[i] = image_copy
+            generatedImages.append(proc.images)
             image = imageOriginal
-            for k in range(len(generatedImages)):
-                mask = Image.fromarray(masks[k])
-                mask = mask.filter(ImageFilter.GaussianBlur(p.mask_blur))
-                image = apply_overlay(generatedImages[k][j], paste_to[k], image, mask)
-        else:
-            image = proc.images[j]
+
+    if selectedTab != "existingFacesTab":
+        for j in range(p.n_iter * p.batch_size):
+            if not invertMask:
+                image = imageOriginal
+                for k in range(len(generatedImages)):
+                    mask = Image.fromarray(masks[k])
+                    mask = mask.filter(ImageFilter.GaussianBlur(p.mask_blur))
+                    image = apply_overlay(generatedImages[k][j], paste_to[k], image, mask)
+            else:
+                image = proc.images[j]
+
+            info = infotext(p)
+
+            final_forced_filename = forced_filename+"_"+str(j+1) if forced_filename != None and (p.batch_size > 1 or p.n_iter > 1) else forced_filename
+            if opts.samples_format != "png" and image.mode != 'RGB':
+                image = image.convert('RGB')
+            images.save_image(image, pathToSave if pathToSave !="" else opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=final_forced_filename)
+
+            finishedImages.append(image)
+
+        p.do_not_save_samples = False
+    else:
+        image = imageOriginal
+        mask = Image.fromarray(masks[0])
+        mask = mask.filter(ImageFilter.GaussianBlur(p.mask_blur))
+        image = apply_overlay(image_face, paste_to[0], image, mask)
 
         info = infotext(p)
 
@@ -294,13 +316,12 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathT
 
         finishedImages.append(image)
 
-    p.do_not_save_samples = False
-
     return finishedImages
 
-def generateImages(p, facecfg, path, searchSubdir, viewResults, divider, howSplit, saveMask, pathToSave, saveToOriginalFolder, onlyMask, saveNoFace, overrideDenoising, overrideMaskBlur, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab, loadGenParams, rotation_threshold):
+def generateImages(p, facecfg, path, searchSubdir, viewResults, divider, howSplit, saveMask, pathToSave, saveToOriginalFolder, onlyMask, saveNoFace, overrideDenoising, overrideMaskBlur, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, pathFacesExisting, pathToSaveExisting, selectedTab, loadGenParams, rotation_threshold):
     suffix = ''
     info = infotext(p)
+    image_face = None
     if selectedTab == "generateMasksTab":
         finishedImages = []
         wasCountFaces = False
@@ -386,7 +407,7 @@ def generateImages(p, facecfg, path, searchSubdir, viewResults, divider, howSpli
             masks, totalNumberOfFaces, faces_info, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file, totalNumberOfFaces, singleMaskPerImage, countFaces, maskSize, skip)
 
             if facecfg.debugSave:
-                faceDebug(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info)
+                faceDebug(p, masks, image, image_face, finishedImages, invertMask, forced_filename, pathToSave, info)
 
             # Only generate mask
             if onlyMask:
@@ -420,7 +441,7 @@ def generateImages(p, facecfg, path, searchSubdir, viewResults, divider, howSpli
                 continue
 
             if not onlyMask:
-                finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSave, info, selectedTab, geninfo, faces_info, rotation_threshold)
+                finishedImages = faceSwap(p, masks, image, image_face, finishedImages, invertMask, forced_filename, pathToSave, info, selectedTab, geninfo, faces_info, rotation_threshold)
 
             if usingFilenames and not viewResults:
                 finishedImages = []
@@ -468,8 +489,57 @@ def generateImages(p, facecfg, path, searchSubdir, viewResults, divider, howSpli
                     p.denoising_strength = 0.5
                 if overrideMaskBlur == True:
                     p.mask_blur = int(math.ceil(0.01*height))
+                finishedImages = faceSwap(p, masks, image, image_face, finishedImages, invertMask, forced_filename, pathToSaveExisting, info, selectedTab, geninfo, faces_info, rotation_threshold)
 
-                finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, pathToSaveExisting, info, selectedTab, faces_info, rotation_threshold)
+                if not viewResults:
+                    finishedImages = []
+
+# EXISTING FACES
+    elif selectedTab == "existingFacesTab":
+        finishedImages = []
+        allImages = []
+        allFaces = []
+        searchSubdir = False
+        totalNumberOfFaces = 0
+        geninfo = ""
+
+        onlyHorizontal = ("Horizontal" in howSplit)
+        onlyVertical   = ("Vertical" in howSplit)
+
+        if pathExisting != '' and pathFacesExisting != '':
+            allImages = listFiles(pathExisting, searchSubdir, allImages)
+            allFaces = listFiles(pathFacesExisting, searchSubdir, allFaces)
+
+            print(f"\nWill process {len(allImages)} images, generating {p.n_iter * p.batch_size} new images for each.")
+            state.job_count = len(allImages) * p.n_iter
+            for i, file in enumerate(allImages):
+                forced_filename = os.path.splitext(os.path.basename(file))[0]
+
+                state.job = f"{i+1} out of {len(allImages)}"
+
+                if state.skipped:
+                    state.skipped = False
+                elif state.interrupted:
+                    break
+
+                try:
+                    image = Image.open(file)
+                    width, height = image.size
+
+                    image_face = Image.open(os.path.join(pathFacesExisting, os.path.splitext(os.path.basename(file))[0])+os.path.splitext(allFaces[i])[1])
+
+                    skip = 0
+                    masks, totalNumberOfFaces, faces_info, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file, totalNumberOfFaces, singleMaskPerImage, countFaces, maskSize, skip)
+                except UnidentifiedImageError:
+                    print(f"\nUnable to open {file}, skipping")
+                    continue
+
+                if overrideDenoising == True:
+                    p.denoising_strength = 0.5
+                if overrideMaskBlur == True:
+                    p.mask_blur = int(math.ceil(0.01*height))
+
+                finishedImages = faceSwap(p, masks, image, image_face, finishedImages, invertMask, forced_filename, pathToSaveExisting, info, selectedTab, geninfo, faces_info, rotation_threshold)
 
                 if not viewResults:
                     finishedImages = []
@@ -694,6 +764,12 @@ class Script(scripts.Script):
                     pathMasksExisting = gr.Textbox(label="Masks directory",placeholder=r"C:\Users\dude\Desktop\masks")
                     pathToSaveExisting = gr.Textbox(label="Output directory (OPTIONAL)",placeholder=r"Leave empty to save to default directory")
 
+            with gr.Tab("Existing faces",) as existingFacesTab:
+                with gr.Column(variant='panel'):
+                    pathExisting = gr.Textbox(label="Images directory",placeholder=r"C:\Users\dude\Desktop\images")
+                    pathFacesExisting = gr.Textbox(label="Faces directory",placeholder=r"C:\Users\dude\Desktop\faces")
+                    pathToSaveExisting = gr.Textbox(label="Output directory (OPTIONAL)",placeholder=r"Leave empty to save to default directory")
+
         # General
         with gr.Box():
             with gr.Column(variant='panel'):
@@ -724,6 +800,7 @@ class Script(scripts.Script):
         selectedTab = gr.Textbox(value="generateMasksTab", visible=False)
         generateMasksTab.select(lambda: "generateMasksTab", inputs=None, outputs=selectedTab)
         existingMasksTab.select(lambda: "existingMasksTab", inputs=None, outputs=selectedTab)
+        existingFacesTab.select(lambda: "existingFacesTab", inputs=None, outputs=selectedTab)
 
         faceDetectMode.change(fn=None, _js="gradioApp().getElementById('mode_img2img').querySelectorAll('button')[4].click()", inputs=None, outputs=None)
         minFace.change(fn=None, _js="gradioApp().getElementById('mode_img2img').querySelectorAll('button')[4].click()", inputs=None, outputs=None)
@@ -756,9 +833,9 @@ class Script(scripts.Script):
         showTips.change(switchTipsVisibility, showTips, htmlTip5)
         showTips.change(switchTipsVisibility, showTips, htmlTip6)
 
-        return [overrideDenoising, overrideMaskBlur, path, searchSubdir, divider, howSplit, saveMask, pathToSave, saveToOriginalFolder, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect, loadGenParams, rotation_threshold]
+        return [overrideDenoising, overrideMaskBlur, path, searchSubdir, divider, howSplit, saveMask, pathToSave, saveToOriginalFolder, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, pathFacesExisting, pathToSaveExisting, selectedTab, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect, loadGenParams, rotation_threshold]
 
-    def run(self, p, overrideDenoising, overrideMaskBlur, path, searchSubdir, divider, howSplit, saveMask, pathToSave, saveToOriginalFolder, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect, loadGenParams, rotation_threshold):
+    def run(self, p, overrideDenoising, overrideMaskBlur, path, searchSubdir, divider, howSplit, saveMask, pathToSave, saveToOriginalFolder, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, pathFacesExisting, pathToSaveExisting, selectedTab, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect, loadGenParams, rotation_threshold):
         wasGrid = p.do_not_save_grid
         wasInpaintFullRes = p.inpaint_full_res
 
@@ -768,7 +845,7 @@ class Script(scripts.Script):
         all_images = []
 
         facecfg = FaceDetectConfig(faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect)
-        finishedImages = generateImages(p, facecfg, path, searchSubdir, viewResults, int(divider), howSplit, saveMask, pathToSave, saveToOriginalFolder, onlyMask, saveNoFace, overrideDenoising, overrideMaskBlur, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, pathToSaveExisting, selectedTab, loadGenParams, rotation_threshold)
+        finishedImages = generateImages(p, facecfg, path, searchSubdir, viewResults, int(divider), howSplit, saveMask, pathToSave, saveToOriginalFolder, onlyMask, saveNoFace, overrideDenoising, overrideMaskBlur, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, pathFacesExisting, pathToSaveExisting, selectedTab, loadGenParams, rotation_threshold)
 
         if not viewResults:
             finishedImages = []
