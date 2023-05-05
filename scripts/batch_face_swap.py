@@ -927,7 +927,7 @@ class Script(scripts.Script):
             proc = Processed(p, all_images)
 
             # doing this to prevent generating another generation which would otherwise occur
-            p.batch_size = 0
+            p.batch_size = 1
             p.n_iter = 0
             p.init_images[0] = all_images[0]
             
