@@ -233,34 +233,29 @@ def faceDebug(
 
     debugsave(overlay_image)
 
-def faceSwap(
-    p, 
-    masks, 
-    image, 
-    finishedImages, 
-    invertMask, 
-    forced_filename, 
-    output_path, 
-    info, 
-    selectedTab,
-    mainTab, 
-    geninfo, 
-    faces_info, 
-    rotation_threshold,
-    overrideDenoising,
-    overrideMaskBlur,
-    sd_model
-):
-    original_model = modules.sd_models.select_checkpoint()
-    apply_checkpoint(sd_model)
+def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, output_path, info, selectedTab,mainTab, geninfo, faces_info, rotation_threshold, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding):
 
+    bfs_prompt = bfs_prompt if overridePrompt else p.prompt
+    bfs_nprompt = bfs_nprompt if overridePrompt else p.negative_prompt
+    original_model = modules.sd_models.select_checkpoint()
+    if overrideModel:
+        apply_checkpoint(sd_model)
+    sd_sampler = sd_sampler if overrideSampler else p.sampler_name
     batch_size = 1 if mainTab == "txt2img" else p.batch_size
     n_iter = 1 if mainTab == "txt2img" else p.n_iter
-    denoising_strength = 0.5 #TODO add a slider for denoising strength
-    mask_blur = int(math.ceil(0.01*image.height)) #TODO add a slider for mask blur
-    inpaint_full_res_padding = 32 #TODO add a slider for padding
+    denoising_strength = 0.5 if overrideDenoising else denoising_strength
+
+    # automatically adjust mask_blur based on the size of the image but don't make it higher than 30
+    mask_blur = np.clip(int(math.ceil(0.01*image.height if image.height > image.width else 0.01*image.width)), None, 30) if overrideMaskBlur else mask_blur
+
+    # automatically adjust inpaint_full_res_padding based on the size of the image
+    inpaint_full_res_padding = int(math.ceil(0.03*image.height if image.height > image.width else 0.03*image.width))  if overridePadding else inpaint_full_res_padding
+
+    inpainting_full_res = 1
     inpainting_fill = 1
     
+    wasGrid = p.do_not_save_grid
+    p.do_not_save_grid = True
     p.do_not_save_samples = True
     index = 0
     generatedImages = []
@@ -310,17 +305,17 @@ def faceSwap(
                 rotate = True
 
         if geninfo != "":
-            p.prompt = str(geninfo.get("Prompt"))
-            p.negative_prompt = str(geninfo.get("Negative prompt"))
+            bfs_prompt = str(geninfo.get("Prompt"))
+            bfs_nprompt = str(geninfo.get("Negative prompt"))
             p.sampler_name = str(geninfo.get("Sampler"))
             p.cfg_scale = float(geninfo.get("CFG scale"))
             p.width = int(geninfo.get("Size-1"))
             p.height = int(geninfo.get("Size-2"))
 
         proc = renderImg2Img(
-            p.prompt,
-            p.negative_prompt,
-            p.sampler_name,
+            bfs_prompt,
+            bfs_nprompt,
+            sd_sampler,
             p.steps,
             p.cfg_scale,
             p.seed,
@@ -330,11 +325,11 @@ def faceSwap(
             image_mask,
             batch_size,
             n_iter,
-            denoising_strength if overrideDenoising == True else p.denoising_strength, #TODO add a slider for denoising strength
-            mask_blur if overrideMaskBlur else p.mask_blur, #TODO add a slider for mask blur
+            denoising_strength,
+            mask_blur,
             inpainting_fill,
-            1,
-            inpaint_full_res_padding, #TODO add a slider for padding
+            inpainting_full_res,
+            inpaint_full_res_padding,
             do_not_save_samples = True,
         )
         apply_checkpoint(original_model.title)
@@ -372,37 +367,11 @@ def faceSwap(
         finishedImages.append(image)
 
     p.do_not_save_samples = False
+    p.do_not_save_grid = wasGrid
 
     return finishedImages
 
-def generateImages(p,
-                   facecfg,
-                   sd_model,  
-                   input_image, 
-                   input_path, 
-                   searchSubdir, 
-                   viewResults, 
-                   divider, 
-                   howSplit, 
-                   saveMask, 
-                   output_path, 
-                   saveToOriginalFolder, 
-                   onlyMask, 
-                   saveNoFace, 
-                   overrideDenoising, 
-                   overrideMaskBlur, 
-                   invertMask, 
-                   singleMaskPerImage, 
-                   countFaces, 
-                   maskSize, 
-                   keepOriginalName, 
-                   pathExisting, 
-                   pathMasksExisting, 
-                   output_pathExisting, 
-                   selectedTab,
-                   mainTab, 
-                   loadGenParams, 
-                   rotation_threshold):
+def generateImages(p, facecfg, input_image, input_path, searchSubdir, viewResults, divider, howSplit, saveMask, output_path, saveToOriginalFolder, onlyMask, saveNoFace, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab,mainTab, loadGenParams, rotation_threshold):
     suffix = ''
     info = infotext(p)
     if selectedTab == "generateMasksTab":
@@ -518,7 +487,7 @@ def generateImages(p,
                 continue
 
             if not onlyMask:
-                finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, output_path, info, selectedTab, mainTab, geninfo, faces_info, rotation_threshold, overrideDenoising, overrideMaskBlur, sd_model)
+                finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, output_path, info, selectedTab, mainTab, geninfo, faces_info, rotation_threshold, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding)
 
             if usingFilenames and not viewResults:
                 finishedImages = []
@@ -563,7 +532,7 @@ def generateImages(p,
                     continue
 
 
-                finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, output_pathExisting, info, selectedTab, mainTab, faces_info, rotation_threshold, overrideDenoising, overrideMaskBlur, sd_model)
+                finishedImages = faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, output_pathExisting, info, selectedTab, mainTab, faces_info, rotation_threshold, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding)
 
                 if not viewResults:
                     finishedImages = []
@@ -578,16 +547,7 @@ class Script(scripts.Script):
         return scripts.AlwaysVisible
     
     def ui(self, is_img2img):
-        # available_samplers = [s.name for s in modules.sd_samplers.samplers if "UniPc" not in s.name]
-        with gr.Accordion("Batch Face Swap", open = False, elem_id="batch_face_swap"):
-            with gr.Row():
-                enabled = gr.Checkbox(label='Enable', value=False)
-                available_models = modules.sd_models.checkpoint_tiles()
-                sd_model = gr.Dropdown(label="SD Model", choices=available_models, value=shared.sd_model.sd_checkpoint_info.title, type="value", interactive=True)
-                modules.ui.create_refresh_button(sd_model, modules.sd_models.list_models, lambda: {"choices": modules.sd_models.checkpoint_tiles()}, "refresh_sd_checkpoint")
-
-            with gr.Accordion("Settings", open = False):         
-                def updateVisualizer(searchSubdir: bool, howSplit: str, divider: int, maskSize: int, input_path: str, visualizationOpacity: int, faceMode: int):
+        def updateVisualizer(searchSubdir: bool, howSplit: str, divider: int, maskSize: int, input_path: str, visualizationOpacity: int, faceMode: int):
                     facecfg = FaceDetectConfig(faceMode) # this is a huge pain to patch through so don't bother
                     allFiles = []
                     totalNumberOfFaces = 0
@@ -702,47 +662,91 @@ class Script(scripts.Script):
 
                     update = gr.Image.update(value=image)
                     return update
-
-                def switchSaveMaskInteractivity(onlyMask: bool):
-                    return gr.Checkbox.update(interactive=bool(onlyMask))
-                def switchSaveMask(onlyMask: bool):
-                    if onlyMask == False:
-                        return gr.Checkbox.update(value=bool(onlyMask))
-                def switchTipsVisibility(showTips: bool):
-                    return gr.HTML.update(visible=bool(showTips))
-                def switchInvertMask(invertMask: bool):
-                    return gr.Checkbox.update(value=bool(invertMask))
-
-                if is_img2img:
-                    # Path to images
-                    gr.HTML("<p style=\"margin-top:0.10em;font-size:1.5em\"><strong>Input:</strong></p>")
-                    with gr.Column(variant='panel'):
-                        htmlTip1 = gr.HTML("<p>'Load from subdirectories' will include all images in all subdirectories.</p>",visible=False)
-                        with gr.Row():
-                            input_path = gr.Textbox(label="Images directory",placeholder=r"C:\Users\dude\Desktop\images", visible=True)
-                            output_path = gr.Textbox(label="Output directory (OPTIONAL)",placeholder=r"Leave empty to save to default directory")
-                        with gr.Row():
-                            searchSubdir = gr.Checkbox(value=False, label="Load from subdirectories")
-                            saveToOriginalFolder = gr.Checkbox(value=False, label="Save to original folder")
-                        keepOriginalName = gr.Checkbox(value=False, label="Keep original file name (OVERWRITES FILES WITH THE SAME NAME)")
-                        loadGenParams = gr.Checkbox(value=False, label="Load generation parameters from images")
-
-                else:
-                    htmlTip1 = gr.HTML("<p></p>",visible=False)
-                    input_path = gr.Textbox(label="Images directory", visible=False)
-                    output_path = gr.Textbox(label="Output directory (OPTIONAL)", visible=False)
-                    searchSubdir = gr.Checkbox(value=False, label="Load from subdirectories", visible=False)
-                    saveToOriginalFolder = gr.Checkbox(value=False, label="Save to original folder", visible=False)
-                    keepOriginalName = gr.Checkbox(value=False, label="Keep original file name (OVERWRITES FILES WITH THE SAME NAME)", visible=False)
-                    loadGenParams = gr.Checkbox(value=False, label="Load generation parameters from images", visible=False)
+        def switchSaveMaskInteractivity(onlyMask: bool):
+            return gr.Checkbox.update(interactive=bool(onlyMask))
+        def switchSaveMask(onlyMask: bool):
+            if onlyMask == False:
+                return gr.Checkbox.update(value=bool(onlyMask))
+        def switchTipsVisibility(showTips: bool):
+            return gr.HTML.update(visible=bool(showTips))
+        def switchInvertMask(invertMask: bool):
+            return gr.Checkbox.update(value=bool(invertMask))
+        def switchColumnVisibility(switch_element: bool):
+            return gr.Column.update(visible=bool(switch_element))
+        def switchColumnVisibilityInverted(switch_element: bool):
+            return gr.Column.update(visible=bool(not switch_element))
+        def switchEnableLabel(enabled: bool):
+            if enabled == True:
+                return gr.Checkbox.update(label=str("Enabled ✅"))
+            else:
+                return gr.Checkbox.update(label=str("Disabled ❌"))
+        
+        with gr.Accordion("🎭 Batch Face Swap 🎭", open = False, elem_id="batch_face_swap"):
+            enabled = gr.Checkbox(label='Disabled ❌', value=False)
+            with gr.Accordion("♻ Overrides ♻", open = True):
                 with gr.Box():
                     # Overrides
-                    with gr.Column(variant='panel'):
-                        gr.HTML("<p style=\"margin-top:0.75em;font-size:1.25em\">Overrides:</p>")
+                    with gr.Column():
+                        with gr.Column(variant='panel'):
+                            overridePrompt = gr.Checkbox(value=False, label="""Override "Prompt" """)
+                            with gr.Column(visible=False) as override_prompt_col:
+                                bfs_prompt = gr.Textbox(label="Prompt", show_label=False, lines=2, placeholder="Prompt")
+                                bfs_nprompt = gr.Textbox(label="Negative prompt", show_label=False, lines=2, placeholder="Negative prompt")
                         with gr.Row():
-                            overrideDenoising = gr.Checkbox(value=True, label="""Override "Denoising strength" to 0.5""")
-                            overrideMaskBlur = gr.Checkbox(value=True, label="""Override "Mask blur" to automatic""")
+                            with gr.Column():
+                                with gr.Column(variant='panel'):
+                                    overrideSampler = gr.Checkbox(value=False, label="""Override "Sampling method" """)
+                                    with gr.Column(visible=False) as override_sampler_col:
+                                        available_samplers = [s.name for s in modules.sd_samplers.samplers_for_img2img]
+                                        sd_sampler = gr.Dropdown(label="Sampling Method", choices=available_samplers, value="Euler a", type="value", interactive=True)
+                                with gr.Column(variant='panel'):
+                                    overrideDenoising = gr.Checkbox(value=True, label="""Override "Denoising strength" to 0.5""")
+                                    with gr.Column(visible=False) as override_denoising_col:
+                                        denoising_strength = gr.Slider(minimum=0, maximum=1, step=0.01 , value=0.5, label="Denoising Strength", interactive=True)
 
+                            with gr.Column():
+                                with gr.Column(variant='panel'):
+                                    overrideModel = gr.Checkbox(value=False, label="""Override "Stable Diffusion checkpoint" """)
+                                    with gr.Column(visible=False) as override_model_col:
+                                        with gr.Row():
+                                            available_models = modules.sd_models.checkpoint_tiles()
+                                            sd_model = gr.Dropdown(label="SD Model", choices=available_models, value=shared.sd_model.sd_checkpoint_info.title, type="value", interactive=True)
+                                            modules.ui.create_refresh_button(sd_model, modules.sd_models.list_models, lambda: {"choices": modules.sd_models.checkpoint_tiles()}, "refresh_sd_checkpoint")
+                                with gr.Column(variant='panel'):
+                                    overrideMaskBlur = gr.Checkbox(value=True, label="""Override "Mask blur" to automatic""")
+                                    with gr.Column(visible=False) as override_maskBlur_col:
+                                        mask_blur = gr.Slider(minimum=0, maximum=64, step=1  , value=4, label="Mask Blur", interactive=True)
+                        with gr.Column(variant='panel'):
+                            with gr.Row():
+                                overridePadding = gr.Checkbox(value=True, label="""Override "Only masked padding, pixels" to automatic""")
+                            with gr.Row():
+                                with gr.Column(visible=False) as override_padding_col:
+                                    inpaint_full_res_padding = gr.Slider(minimum=0, maximum=256, step=4 , value=32, label="Only masked padding, pixels", interactive=True)
+
+            if is_img2img:
+                # Path to images
+                gr.HTML("<p style=\"margin-top:0.10em;font-size:1.5em\"><strong>Input:</strong></p>")
+                with gr.Column(variant='panel'):
+                    htmlTip1 = gr.HTML("<p>'Load from subdirectories' will include all images in all subdirectories.</p>",visible=False)
+                    with gr.Row():
+                        input_path = gr.Textbox(label="Images directory",placeholder=r"C:\Users\dude\Desktop\images", visible=True)
+                        output_path = gr.Textbox(label="Output directory (OPTIONAL)",placeholder=r"Leave empty to save to default directory")
+                    with gr.Row():
+                        searchSubdir = gr.Checkbox(value=False, label="Load from subdirectories")
+                        saveToOriginalFolder = gr.Checkbox(value=False, label="Save to original folder")
+                    keepOriginalName = gr.Checkbox(value=False, label="Keep original file name (OVERWRITES FILES WITH THE SAME NAME)")
+                    loadGenParams = gr.Checkbox(value=False, label="Load generation parameters from images")
+
+            else:
+                htmlTip1 = gr.HTML("<p></p>",visible=False)
+                input_path = gr.Textbox(label="Images directory", visible=False)
+                output_path = gr.Textbox(label="Output directory (OPTIONAL)", visible=False)
+                searchSubdir = gr.Checkbox(value=False, label="Load from subdirectories", visible=False)
+                saveToOriginalFolder = gr.Checkbox(value=False, label="Save to original folder", visible=False)
+                keepOriginalName = gr.Checkbox(value=False, label="Keep original file name (OVERWRITES FILES WITH THE SAME NAME)", visible=False)
+                loadGenParams = gr.Checkbox(value=False, label="Load generation parameters from images", visible=False)
+
+            with gr.Accordion("⚙️ Settings ⚙️", open = False):
                 with gr.Column(variant='panel'):
                     with gr.Tab("Generate masks") as generateMasksTab:
                         # Face detection
@@ -774,7 +778,7 @@ class Script(scripts.Script):
                                 htmlTip3 = gr.HTML("<p>This divides image to smaller images and tries to find a face in the individual smaller images.</p><p>Useful when faces are small in relation to the size of the whole picture and are not being detected.</p><p>(may result in mask that only covers a part of a face or no detection if the division goes right through the face)</p><p>Open 'Split visualizer' to see how it works.</p>",visible=False)
                                 with gr.Row():
                                     divider = gr.Slider(minimum=1, maximum=5, step=1, value=1, label="How many images to divide into")
-                                    maskSize = gr.Slider(minimum=-10, maximum=10, step=1, value=0, label="Mask size")
+                                    maskSize = gr.Slider(minimum=-10, maximum=10, step=1, value=1, label="Mask size")
                                 howSplit = gr.Radio(["Horizontal only ▤", "Vertical only ▥", "Both ▦"], value = "Both ▦", label = "How to divide")
                                 with gr.Accordion(label="Visualizer", open=False):
                                     exampleImage = gr.Image(value=Image.open("./extensions/batch-face-swap/images/exampleB.jpg"), label="Split visualizer", show_label=False, type="pil", visible=True).style(height=500)
@@ -830,6 +834,16 @@ class Script(scripts.Script):
                 selectedTab = gr.Textbox(value="generateMasksTab", visible=False)
                 generateMasksTab.select(lambda: "generateMasksTab", inputs=None, outputs=selectedTab)
                 existingMasksTab.select(lambda: "existingMasksTab", inputs=None, outputs=selectedTab)
+
+                # make sure user is in the "Inpaint upload" tab
+                input_path.change(fn=None, _js="gradioApp().getElementById('mode_img2img').querySelectorAll('button')[4].click()", inputs=None, outputs=None)
+                output_path.change(fn=None, _js="gradioApp().getElementById('mode_img2img').querySelectorAll('button')[4].click()", inputs=None, outputs=None)
+                searchSubdir.change(fn=None, _js="gradioApp().getElementById('mode_img2img').querySelectorAll('button')[4].click()", inputs=None, outputs=None)
+                saveToOriginalFolder.change(fn=None, _js="gradioApp().getElementById('mode_img2img').querySelectorAll('button')[4].click()", inputs=None, outputs=None)
+                keepOriginalName.change(fn=None, _js="gradioApp().getElementById('mode_img2img').querySelectorAll('button')[4].click()", inputs=None, outputs=None)
+                loadGenParams.change(fn=None, _js="gradioApp().getElementById('mode_img2img').querySelectorAll('button')[4].click()", inputs=None, outputs=None)
+
+                enabled.change(switchEnableLabel, enabled, enabled)
                 
                 onlyMask.change(switchSaveMaskInteractivity, onlyMask, saveMask)
                 onlyMask.change(switchSaveMask, onlyMask, saveMask)
@@ -844,6 +858,13 @@ class Script(scripts.Script):
                 maskSize.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, input_path, visualizationOpacity, faceDetectMode], exampleImage)
                 input_path.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, input_path, visualizationOpacity, faceDetectMode], exampleImage)
 
+                overridePrompt.change(switchColumnVisibility, overridePrompt, override_prompt_col)
+                overrideSampler.change(switchColumnVisibility, overrideSampler, override_sampler_col)
+                overrideModel.change(switchColumnVisibility, overrideModel, override_model_col)
+                overrideDenoising.change(switchColumnVisibilityInverted, overrideDenoising, override_denoising_col)
+                overrideMaskBlur.change(switchColumnVisibilityInverted, overrideMaskBlur, override_maskBlur_col)
+                overridePadding.change(switchColumnVisibilityInverted, overridePadding, override_padding_col)
+
                 showTips.change(switchTipsVisibility, showTips, htmlTip1)
                 showTips.change(switchTipsVisibility, showTips, htmlTip2)
                 showTips.change(switchTipsVisibility, showTips, htmlTip3)
@@ -851,18 +872,15 @@ class Script(scripts.Script):
                 showTips.change(switchTipsVisibility, showTips, htmlTip5)
                 showTips.change(switchTipsVisibility, showTips, htmlTip6)
 
-        return [enabled, sd_model, mainTab, overrideDenoising, overrideMaskBlur, input_path, searchSubdir, divider, howSplit, saveMask, output_path, saveToOriginalFolder, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect, loadGenParams, rotation_threshold]
+        return [enabled, mainTab, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, input_path, searchSubdir, divider, howSplit, saveMask, output_path, saveToOriginalFolder, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect, loadGenParams, rotation_threshold]
 
-    def process(self, p, enabled, sd_model, mainTab, overrideDenoising, overrideMaskBlur, input_path, searchSubdir, divider, howSplit, saveMask, output_path, saveToOriginalFolder, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect, loadGenParams, rotation_threshold):
+    def process(self, p, enabled, mainTab, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, input_path, searchSubdir, divider, howSplit, saveMask, output_path, saveToOriginalFolder, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect, loadGenParams, rotation_threshold):
 
         if enabled and mainTab == "img2img":
             global all_images
 
             wasGrid = p.do_not_save_grid
             p.do_not_save_grid = True
-            wasInpaintFullRes = p.inpaint_full_res
-            p.inpaint_full_res = 1
-            
 
             all_images = []
 
@@ -870,8 +888,10 @@ class Script(scripts.Script):
 
             if input_path == '':
                 input_image = [ p.init_images[0] ]
+            else:
+                input_image = None
 
-            finishedImages = generateImages(p, facecfg, sd_model, input_image, input_path, searchSubdir, viewResults, int(divider), howSplit, saveMask, output_path, saveToOriginalFolder, onlyMask, saveNoFace, overrideDenoising, overrideMaskBlur, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, mainTab, loadGenParams, rotation_threshold)
+            finishedImages = generateImages(p, facecfg, input_image, input_path, searchSubdir, viewResults, int(divider), howSplit, saveMask, output_path, saveToOriginalFolder, onlyMask, saveNoFace, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, mainTab, loadGenParams, rotation_threshold)
 
             if not viewResults:
                 finishedImages = []
@@ -880,17 +900,17 @@ class Script(scripts.Script):
 
             proc = Processed(p, all_images)
 
-            p.do_not_save_grid = wasGrid
-            p.inpaint_full_res = wasInpaintFullRes
-
+            # doing this to prevent generating another generation which would otherwise occur
             p.batch_size = 0
             p.n_iter = 0
+            p.init_images[0] = all_images[0]
             
+            p.do_not_save_grid = wasGrid
             return proc
         else:
             pass
 
-    def postprocess(self, p, processed, enabled, sd_model, mainTab, overrideDenoising, overrideMaskBlur, input_path, searchSubdir, divider, howSplit, saveMask, output_path, saveToOriginalFolder, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect, loadGenParams, rotation_threshold):
+    def postprocess(self, p, processed, enabled, mainTab, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, input_path, searchSubdir, divider, howSplit, saveMask, output_path, saveToOriginalFolder, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect, loadGenParams, rotation_threshold):
 
         if enabled and mainTab == "txt2img":
             global all_images
@@ -908,7 +928,7 @@ class Script(scripts.Script):
                 input_image += processed.images
 
 
-            finishedImages = generateImages(p, facecfg, sd_model, input_image, input_path, searchSubdir, viewResults, int(divider), howSplit, saveMask, output_path, saveToOriginalFolder, onlyMask, saveNoFace, overrideDenoising, overrideMaskBlur, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, mainTab, loadGenParams, rotation_threshold)
+            finishedImages = generateImages(p, facecfg, input_image, input_path, searchSubdir, viewResults, int(divider), howSplit, saveMask, output_path, saveToOriginalFolder, onlyMask, saveNoFace, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, mainTab, loadGenParams, rotation_threshold)
 
             if not viewResults:
                 finishedImages = []
