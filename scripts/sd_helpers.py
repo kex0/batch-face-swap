@@ -14,7 +14,10 @@ def renderTxt2Img(
     cfg_scale, 
     seed, 
     width, 
-    height
+    height,
+    batch_size,
+    n_iter,
+    do_not_save_samples,
 ):
     processed = None
     p = StableDiffusionProcessingTxt2Img(
@@ -25,15 +28,16 @@ def renderTxt2Img(
         negative_prompt=negative_prompt,
         seed=seed,
         sampler_name=sampler,
-        n_iter=1,
         steps=steps,
         cfg_scale=cfg_scale,
         width=width,
         height=height,
+        batch_size=batch_size,
+        n_iter=n_iter,
+        do_not_save_samples=do_not_save_samples
     )
     processed = process_images(p)
-    newseed = p.seed
-    return processed, newseed
+    return processed
 
 
 def renderImg2Img(
