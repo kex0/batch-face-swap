@@ -313,10 +313,10 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, outpu
         if geninfo != "":
             bfs_prompt = str(geninfo.get("Prompt"))
             bfs_nprompt = str(geninfo.get("Negative prompt"))
-            p.sampler_name = str(geninfo.get("Sampler"))
-            p.cfg_scale = float(geninfo.get("CFG scale"))
-            p.width = int(geninfo.get("Size-1"))
-            p.height = int(geninfo.get("Size-2"))
+            sd_sampler = str(geninfo.get("Sampler"))
+            cfg_scale = float(geninfo.get("CFG scale"))
+            bfs_width = int(geninfo.get("Size-1"))
+            bfs_height = int(geninfo.get("Size-2"))
 
         proc = renderImg2Img(
             bfs_prompt,
@@ -926,7 +926,7 @@ class Script(scripts.Script):
 
             proc = Processed(p, all_images)
 
-            # doing this to prevent generating another generation which would otherwise occur
+            # doing this to prevent starting another img2img generation
             p.batch_size = 1
             p.n_iter = 0
             p.init_images[0] = all_images[0]
