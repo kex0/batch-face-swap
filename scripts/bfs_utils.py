@@ -79,28 +79,32 @@ def maskResize(mask, maskSize, height):
 
     return mask
 
-def listFiles(path, searchSubdir, allFiles):
-    if searchSubdir:
-        for root, _, files in os.walk(os.path.abspath(path)):
-            for file in files:
-                if file.endswith(('.png', '.jpg', '.jpeg', '.bmp', '.PNG', '.JPG', '.JPEG', '.BMP')):
-                    allFiles.append(os.path.join(root, file))
-    else:
-        allFiles = [os.path.join(path, f) for f in os.listdir(path) if os.path.isfile(os.path.join(path, f)) and f.endswith(('.png', '.jpg', '.jpeg', '.bmp', '.PNG', '.JPG', '.JPEG', '.BMP'))]
+def listFiles(input_path, searchSubdir, allFiles):
+    try:
+        if searchSubdir:
+            for root, _, files in os.walk(os.path.abspath(input_path)):
+                for file in files:
+                    if file.endswith(('.png', '.jpg', '.jpeg', '.bmp', '.PNG', '.JPG', '.JPEG', '.BMP')):
+                        allFiles.append(os.path.join(root, file))
+        else:
+            allFiles = [os.path.join(input_path, f) for f in os.listdir(input_path) if os.path.isfile(os.path.join(input_path, f)) and f.endswith(('.png', '.jpg', '.jpeg', '.bmp', '.PNG', '.JPG', '.JPEG', '.BMP'))]
+    except FileNotFoundError:
+        if input_path != "":
+            print(f'Directory "{input_path}" not found!')
 
     return allFiles
 
-def custom_save_image(p, image, pathToSave, forced_filename, suffix, info):
-    if pathToSave != "":
+def custom_save_image(p, image, output_path, forced_filename, suffix, info):
+    if output_path != "":
         if opts.samples_format == "png":
-            images.save_image(image, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
+            images.save_image(image, output_path, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
         elif image.mode != 'RGB':
             image = image.convert('RGB')
-            images.save_image(image, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
+            images.save_image(image, output_path, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
         else:
-            images.save_image(image, pathToSave, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
+            images.save_image(image, output_path, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
 
-    elif pathToSave == "":
+    elif output_path == "":
         if opts.samples_format == "png":
             images.save_image(image, opts.outdir_img2img_samples, "", p.seed, p.prompt, opts.samples_format, info=info, p=p, forced_filename=forced_filename, suffix=suffix)
         elif image.mode != 'RGB':
