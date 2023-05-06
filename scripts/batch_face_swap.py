@@ -17,7 +17,6 @@ import random
 from modules import images, masking, generation_parameters_copypaste, script_callbacks
 from modules.processing import process_images, create_infotext, Processed
 from modules.shared import opts, cmd_opts, state
-from modules.sd_models import list_models
 import modules.shared as shared
 import modules.sd_samplers
 
@@ -688,7 +687,12 @@ class Script(scripts.Script):
                 return gr.Checkbox.update(label=str("Disabled ❌"))
         
         with gr.Accordion("🎭 Batch Face Swap 🎭", open = False, elem_id="batch_face_swap"):
-            enabled = gr.Checkbox(label='Disabled ❌', value=False)
+            with gr.Row():
+                enabled = gr.Checkbox(label='Disabled ❌', value=False)
+                if not is_img2img:
+                    regen_btn = gr.Button(value="Swap 🎭", variant="primary", interactive=True)
+                else:
+                    regen_btn = gr.Button(value="Swap 🎭", variant="primary", visible=False)
             with gr.Accordion("♻ Overrides ♻", open = True):
                 with gr.Box():
                     # Overrides
@@ -852,7 +856,11 @@ class Script(scripts.Script):
                         minNeighbors = gr.Slider(minimum=1 , maximum = 10, step=1  , value=5, label="minNeighbors")
                         mpconfidence = gr.Slider(minimum=0.01, maximum = 2.0, step=0.01, value=0.5, label="FaceMesh confidence threshold")
                         mpcount      = gr.Slider(minimum=1, maximum = 20, step=1, value=5, label="FaceMesh maximum faces")
+                
+                # def retriveP(getp: bool):
 
+                # getp = gr.Checkbox(value=True, label="get p", visible=False)
+                
                 mainTab  = gr.Textbox(value=f"""{"img2img" if is_img2img else "txt2img"}""", visible=False)
                 selectedTab = gr.Textbox(value="generateMasksTab", visible=False)
                 generateMasksTab.select(lambda: "generateMasksTab", inputs=None, outputs=selectedTab)
@@ -866,6 +874,21 @@ class Script(scripts.Script):
                 keepOriginalName.change(fn=None, _js="gradioApp().getElementById('mode_img2img').querySelectorAll('button')[4].click()", inputs=None, outputs=None)
                 loadGenParams.change(fn=None, _js="gradioApp().getElementById('mode_img2img').querySelectorAll('button')[4].click()", inputs=None, outputs=None)
 
+
+                def regen(input_path: str, searchSubdir: bool, viewResults: bool, divider: int, howSplit: str, saveMask: bool, output_path: str, saveToOriginalFolder: bool, onlyMask: bool, saveNoFace: bool, overridePrompt: bool, bfs_prompt: str, bfs_nprompt: str, overrideSampler: bool, sd_sampler: str, overrideModel: bool, sd_model: str, overrideDenoising: bool, denoising_strength: float, overrideMaskBlur: bool, mask_blur: float, overridePadding: bool, inpaint_full_res_padding: float, overrideSeed: bool, overrideSteps: bool, steps: float, overrideCfgScale: bool, cfg_scale: float, overrideSize: bool, bfs_width: float, bfs_height: float, invertMask: bool, singleMaskPerImage: bool, countFaces: bool, maskSize: float, keepOriginalName: bool, pathExisting: str, pathMasksExisting: str, output_pathExisting: str, selectedTab: str, mainTab: str, loadGenParams: bool, rotation_threshold: float, faceDetectMode: str, face_x_scale: float, face_y_scale: float, minFace: float, multiScale: float, multiScale2: float, multiScale3: float, minNeighbors: float, mpconfidence: float, mpcount: float, debugSave: bool, optimizeDetect: bool):
+                    try:
+                        p=original_p
+                        image = input_image
+                    except NameError:
+                        print("Make sure you generated an image first!")
+                        return
+
+                    facecfg = FaceDetectConfig(faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect)
+
+                    finishedImages = generateImages(p, facecfg, image, input_path, searchSubdir, viewResults, int(divider), howSplit, saveMask, output_path, saveToOriginalFolder, onlyMask, saveNoFace, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, overrideSeed, overrideSteps, steps, overrideCfgScale, cfg_scale, overrideSize, bfs_width, bfs_height, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, mainTab, loadGenParams, rotation_threshold)
+
+                regen_btn.click(fn=regen, inputs=[input_path, searchSubdir, viewResults, divider, howSplit, saveMask, output_path, saveToOriginalFolder, onlyMask, saveNoFace, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, overrideSeed, overrideSteps, steps, overrideCfgScale, cfg_scale, overrideSize, bfs_width, bfs_height, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, mainTab, loadGenParams, rotation_threshold, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect], outputs=None)
+                
                 enabled.change(switchEnableLabel, enabled, enabled)
                 
                 onlyMask.change(switchSaveMaskInteractivity, onlyMask, saveMask)
@@ -901,10 +924,12 @@ class Script(scripts.Script):
         return [enabled, mainTab, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, overrideSeed, overrideSteps, steps, overrideCfgScale, cfg_scale, overrideSize, bfs_width, bfs_height, input_path, searchSubdir, divider, howSplit, saveMask, output_path, saveToOriginalFolder, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect, loadGenParams, rotation_threshold]
 
     def process(self, p, enabled, mainTab, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, overrideSeed, overrideSteps, steps, overrideCfgScale, cfg_scale, overrideSize, bfs_width, bfs_height, input_path, searchSubdir, divider, howSplit, saveMask, output_path, saveToOriginalFolder, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect, loadGenParams, rotation_threshold):
+        
+        global original_p
+        global all_images
+        original_p = p
 
         if enabled and mainTab == "img2img":
-            global all_images
-
             wasGrid = p.do_not_save_grid
             p.do_not_save_grid = True
 
@@ -938,9 +963,15 @@ class Script(scripts.Script):
 
     def postprocess(self, p, processed, enabled, mainTab, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, overrideSeed, overrideSteps, steps, overrideCfgScale, cfg_scale, overrideSize, bfs_width, bfs_height, input_path, searchSubdir, divider, howSplit, saveMask, output_path, saveToOriginalFolder, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect, loadGenParams, rotation_threshold):
 
-        if enabled and mainTab == "txt2img":
-            global all_images
+        global all_images
+        global input_image
 
+        if input_path == '':
+            input_image = []
+            input_image += processed.images
+
+        if enabled and mainTab == "txt2img":
+            
             wasGrid = p.do_not_save_grid
             p.do_not_save_grid = True
             
@@ -948,10 +979,6 @@ class Script(scripts.Script):
             all_images = []
 
             facecfg = FaceDetectConfig(faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect)
-
-            if input_path == '':
-                input_image = []
-                input_image += processed.images
 
 
             finishedImages = generateImages(p, facecfg, input_image, input_path, searchSubdir, viewResults, int(divider), howSplit, saveMask, output_path, saveToOriginalFolder, onlyMask, saveNoFace, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, overrideSeed, overrideSteps, steps, overrideCfgScale, cfg_scale, overrideSize, bfs_width, bfs_height, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, mainTab, loadGenParams, rotation_threshold)
