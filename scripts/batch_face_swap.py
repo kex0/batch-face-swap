@@ -31,21 +31,7 @@ def apply_checkpoint(x):
         raise RuntimeError(f"Unknown checkpoint: {x}")
     modules.sd_models.reload_model_weights(shared.sd_model, info)
 
-def findFaces(
-    facecfg, 
-    image, 
-    width, 
-    height, 
-    divider, 
-    onlyHorizontal, 
-    onlyVertical, 
-    file, 
-    totalNumberOfFaces, 
-    singleMaskPerImage, 
-    countFaces, 
-    maskSize, 
-    skip
-):
+def findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file, totalNumberOfFaces, singleMaskPerImage, countFaces, maskWidth, maskHeight, skip):
     rejected = 0
     masks = []
     faces_info = []
@@ -73,7 +59,53 @@ def findFaces(
 
         faces = []
 
-        if facecfg.faceMode != FaceMode.ORIGINAL:
+        if facecfg.faceMode == FaceMode.ORIGINAL:
+            landmarks = []
+            landmarks = getFacialLandmarks(small_image, facecfg)
+            numberOfFaces = int(len(landmarks))
+            totalNumberOfFaces += numberOfFaces
+
+            if countFaces:
+                continue
+
+            faces = []
+            for landmark in landmarks:
+                face_info = {}
+                convexhull = cv2.convexHull(landmark)
+                faces.append(convexhull)
+                faces_info.append(computeFaceInfo(landmark, onlyHorizontal, divider, small_width, small_height, small_image_index))
+
+        elif facecfg.faceMode == FaceMode.YUNET:
+            known_face_rects = []
+
+            # first find the faces the old way, since OpenCV is BAD at faces near the camera
+            # save the convex hulls, but also getting bounding boxes so OpenCV can skip those
+            landmarks = getFacialLandmarks(small_image, facecfg)
+            for landmark in landmarks:
+                face_info = {}
+                convexhull = cv2.convexHull(landmark)
+                faces.append(convexhull)
+                bounds = cv2.boundingRect(convexhull)
+                known_face_rects.append(list(bounds)) # convert tuple to array for consistency
+
+                faces_info.append(computeFaceInfo(landmark, onlyHorizontal, divider, small_width, small_height, small_image_index))
+
+            faceRects = getFaceRectanglesYuNet(small_image, known_face_rects)
+
+            for rect in faceRects:
+                landmarkHull, face_info = getFacialLandmarkConvexHull(image, rect, onlyHorizontal, divider, small_width, small_height, small_image_index, facecfg)
+                if landmarkHull is not None:
+                    faces.append(landmarkHull)
+                    faces_info.append(face_info)
+                else:
+                    rejected += 1
+
+            numberOfFaces = int(len(faces))
+            totalNumberOfFaces += numberOfFaces
+            if countFaces:
+                continue
+
+        else:
             # use OpenCV2 multi-scale face detector to find all the faces
 
             known_face_rects = []
@@ -105,21 +137,6 @@ def findFaces(
             if countFaces:
                 continue
 
-        else:
-            landmarks = []
-            landmarks = getFacialLandmarks(small_image, facecfg)
-            numberOfFaces = int(len(landmarks))
-            totalNumberOfFaces += numberOfFaces
-
-            if countFaces:
-                continue
-
-            faces = []
-            for landmark in landmarks:
-                face_info = {}
-                convexhull = cv2.convexHull(landmark)
-                faces.append(convexhull)
-                faces_info.append(computeFaceInfo(landmark, onlyHorizontal, divider, small_width, small_height, small_image_index))
 
         if len(faces) == 0:
             small_image[:] = (0, 0, 0)
@@ -129,11 +146,33 @@ def findFaces(
         if facesInImage == 0 and i == len(small_images) - 1:
             skip = 1
 
-        mask = np.zeros((small_height, small_width), np.uint8)
         for i in range(len(faces)):
-            small_image = cv2.fillConvexPoly(mask, faces[i], 255)
-        processed_image = Image.fromarray(small_image)
-        processed_images.append(processed_image)
+            processed_images = []
+            for k in range(len(small_images)):
+                mask = np.zeros((small_height, small_width), np.uint8)
+                if k == small_image_index:
+                    small_image = cv2.fillConvexPoly(mask, faces[i], 255)
+                    processed_image = Image.fromarray(small_image)
+                    processed_images.append(processed_image)
+                else:
+                    processed_image = Image.fromarray(mask)
+                    processed_images.append(processed_image)
+
+            # Create a new image with the same size as the original large image
+            new_image = Image.new('RGB', (width, height))
+
+            # Paste the processed small images into the new image
+            if onlyHorizontal == True:
+                for i, processed_image in enumerate(processed_images):
+                    x = (i // divider) * small_width
+                    y = (i %  divider) * small_height
+                    new_image.paste(processed_image, (x, y))
+            else:
+                for i, processed_image in enumerate(processed_images):
+                    x = (i %  divider) * small_width
+                    y = (i // divider) * small_height
+                    new_image.paste(processed_image, (x, y))                 
+            masks.append(new_image)
 
     if countFaces:
         return totalNumberOfFaces
@@ -146,76 +185,40 @@ def findFaces(
     # else:
     #     print(f"Found {facesInImage} face(s)")
 
-    # Create a new image with the same size as the original large image
-    new_image = Image.new('RGB', (width, height))
+    binary_masks = []
+    for i, mask in enumerate(masks):
+        gray_image = mask.convert('L')
+        numpy_array = np.array(gray_image)
+        binary_mask = cv2.threshold(numpy_array, 200, 255, cv2.THRESH_BINARY)[1]
+        if maskWidth != 100 or maskHeight != 100:
+            binary_mask = maskResize(binary_mask, maskWidth, maskHeight)
+        binary_masks.append(binary_mask)
 
-    # Paste the processed small images into the new image
-    if onlyHorizontal == True:
-        for i, processed_image in enumerate(processed_images):
-            x = (i // divider) * small_width
-            y = (i %  divider) * small_height
-            new_image.paste(processed_image, (x, y))
+    # try:
+    #     kernel = np.ones((int(math.ceil(0.011*height)),int(math.ceil(0.011*height))),'uint8')
+    #     dilated = cv2.dilate(binary_mask,kernel,iterations=1)
+    #     kernel = np.ones((int(math.ceil(0.0045*height)),int(math.ceil(0.0025*height))),'uint8')
+    #     dilated = cv2.dilate(dilated,kernel,iterations=1,anchor=(1, -1))
+    #     kernel = np.ones((int(math.ceil(0.014*height)),int(math.ceil(0.0025*height))),'uint8')
+    #     dilated = cv2.dilate(dilated,kernel,iterations=1,anchor=(-1, 1))
+    #     mask = dilated
+    # except cv2.error:
+    #     mask = dilated
+
+    if singleMaskPerImage:
+        result = []
+        h, w = binary_masks[0].shape
+        result = np.full((h,w), 0, dtype=np.uint8)
+        for mask in binary_masks:
+            result = cv2.add(result, mask)
+        masks = [ result ]
+        return masks, totalNumberOfFaces, faces_info, skip
     else:
-        for i, processed_image in enumerate(processed_images):
-            x = (i %  divider) * small_width
-            y = (i // divider) * small_height
-            new_image.paste(processed_image, (x, y))
-
-    image = cv2.cvtColor(np.array(new_image), cv2.COLOR_RGB2BGR)
-    imageOriginal[:] = (0, 0, 0)
-    imageOriginal[0:heightOriginal, 0:widthOriginal] = image[0:height, 0:width]
-
-    # convert to grayscale
-    imageOriginal = cv2.cvtColor(imageOriginal, cv2.COLOR_RGB2GRAY)
-    # convert grayscale to binary
-    thresh = 100
-    imageOriginal = cv2.threshold(imageOriginal,thresh,255,cv2.THRESH_BINARY)[1]
-    binary_image = cv2.convertScaleAbs(imageOriginal)
-
-    try:
-        kernel = np.ones((int(math.ceil(0.011*height)),int(math.ceil(0.011*height))),'uint8')
-        dilated = cv2.dilate(binary_image,kernel,iterations=1)
-        kernel = np.ones((int(math.ceil(0.0045*height)),int(math.ceil(0.0025*height))),'uint8')
-        dilated = cv2.dilate(dilated,kernel,iterations=1,anchor=(1, -1))
-        kernel = np.ones((int(math.ceil(0.014*height)),int(math.ceil(0.0025*height))),'uint8')
-        dilated = cv2.dilate(dilated,kernel,iterations=1,anchor=(-1, 1))
-        mask = dilated
-    except cv2.error:
-        mask = dilated
-
-    if maskSize != 0:
-        mask = maskResize(mask, maskSize, height)
-
-    if not singleMaskPerImage:
-        if facesInImage > 1:
-            segmentFaces = True
-            while (segmentFaces):
-                currentBiggest = findBiggestFace(mask)
-                masks.append(currentBiggest)
-                mask = mask - currentBiggest
-
-                whitePixels = cv2.countNonZero(mask)
-                whitePixelThreshold = 0.0005 * (widthOriginal * heightOriginal)
-                if (whitePixels < whitePixelThreshold):
-                    segmentFaces = False
-
-            return masks, totalNumberOfFaces, faces_info, skip
-
-    masks.append(mask)
-
-    return masks, totalNumberOfFaces, faces_info, skip
+        masks = binary_masks
+        return masks, totalNumberOfFaces, faces_info, skip
 
 # generate debug image
-def faceDebug(
-    p, 
-    masks, 
-    image, 
-    finishedImages, 
-    invertMask, 
-    forced_filename, 
-    output_path, 
-    info
-):
+def faceDebug(p, masks, image, finishedImages, invertMask, forced_filename, output_path, info):
     generatedImages = []
     paste_to = []
     imageOriginal = image
@@ -376,7 +379,7 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, outpu
 
     return finishedImages
 
-def generateImages(p, facecfg, input_image, input_path, searchSubdir, viewResults, divider, howSplit, saveMask, output_path, saveToOriginalFolder, onlyMask, saveNoFace, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, overrideSeed, overrideSteps, steps, overrideCfgScale, cfg_scale, overrideSize, bfs_width, bfs_height, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab,mainTab, loadGenParams, rotation_threshold):
+def generateImages(p, facecfg, input_image, input_path, searchSubdir, viewResults, divider, howSplit, saveMask, output_path, saveToOriginalFolder, onlyMask, saveNoFace, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, overrideSeed, overrideSteps, steps, overrideCfgScale, cfg_scale, overrideSize, bfs_width, bfs_height, invertMask, singleMaskPerImage, countFaces, maskWidth, maskHeight, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab,mainTab, loadGenParams, rotation_threshold):
     suffix = ''
     info = infotext(p)
     if selectedTab == "generateMasksTab":
@@ -409,7 +412,7 @@ def generateImages(p, facecfg, input_image, input_path, searchSubdir, viewResult
                 skip = 0
                 image = Image.open(file) if usingFilenames else file
                 width, height = image.size
-                masks, totalNumberOfFaces, faces_info, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file, totalNumberOfFaces, singleMaskPerImage, countFaces, maskSize, skip)
+                masks, totalNumberOfFaces, faces_info, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file, totalNumberOfFaces, singleMaskPerImage, countFaces, maskWidth, maskHeight, skip)
 
         if not onlyMask and countFaces:
             print(f"\nWill process {len(allFiles)} images, found {totalNumberOfFaces} faces, generating {p.n_iter * p.batch_size} new images for each.")
@@ -455,7 +458,7 @@ def generateImages(p, facecfg, input_image, input_path, searchSubdir, viewResult
                 continue
 
             skip = 0
-            masks, totalNumberOfFaces, faces_info, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file, totalNumberOfFaces, singleMaskPerImage, countFaces, maskSize, skip)
+            masks, totalNumberOfFaces, faces_info, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file, totalNumberOfFaces, singleMaskPerImage, countFaces, maskWidth, maskHeight, skip)
 
             if facecfg.debugSave:
                 faceDebug(p, masks, image, finishedImages, invertMask, forced_filename, output_path, info)
@@ -552,7 +555,7 @@ class Script(scripts.Script):
         return scripts.AlwaysVisible
     
     def ui(self, is_img2img):
-        def updateVisualizer(searchSubdir: bool, howSplit: str, divider: int, maskSize: int, input_path: str, visualizationOpacity: int, faceMode: int):
+        def updateVisualizer(searchSubdir: bool, howSplit: str, divider: int, maskWidth: int, maskHeight: int, input_path: str, visualizationOpacity: int, faceMode: int):
                     facecfg = FaceDetectConfig(faceMode) # this is a huge pain to patch through so don't bother
                     allFiles = []
                     totalNumberOfFaces = 0
@@ -582,11 +585,11 @@ class Script(scripts.Script):
                         width, height = image.size
 
                         # if len(masks)==0 and path != '':
-                        masks, totalNumberOfFaces, faces_info, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file=None, totalNumberOfFaces=totalNumberOfFaces, singleMaskPerImage=True, countFaces=False, maskSize=maskSize, skip=0)
+                        masks, totalNumberOfFaces, faces_info, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file=None, totalNumberOfFaces=totalNumberOfFaces, singleMaskPerImage=True, countFaces=False, maskWidth=maskWidth, maskHeight=maskHeight, skip=0)
 
                         mask = masks[0]
 
-                        mask = maskResize(mask, maskSize, height)
+                        # mask = maskResize(mask, maskSize, height)
 
                         mask = Image.fromarray(mask)
                         redImage = Image.new("RGB", (width, height), (255, 0, 0))
@@ -617,11 +620,11 @@ class Script(scripts.Script):
                         width, height = image.size
 
                         # if len(masks)==0 and path != '':
-                        masks, totalNumberOfFaces, faces_info, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file=None, totalNumberOfFaces=totalNumberOfFaces, singleMaskPerImage=True, countFaces=False, maskSize=maskSize, skip=0)
+                        masks, totalNumberOfFaces, faces_info, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file=None, totalNumberOfFaces=totalNumberOfFaces, singleMaskPerImage=True, countFaces=False, maskWidth=maskWidth, maskHeight=maskHeight, skip=0)
 
                         mask = masks[0]
 
-                        mask = maskResize(mask, maskSize, height)
+                        # mask = maskResize(mask, maskSize, height)
 
                         mask = Image.fromarray(mask)
                         redImage = Image.new("RGB", (width, height), (255, 0, 0))
@@ -645,11 +648,11 @@ class Script(scripts.Script):
                         width, height = image.size
 
                         # if len(masks)==0 and path != '':
-                        masks, totalNumberOfFaces, faces_info, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file=None, totalNumberOfFaces=totalNumberOfFaces, singleMaskPerImage=True, countFaces=False, maskSize=maskSize, skip=0)
+                        masks, totalNumberOfFaces, faces_info, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file=None, totalNumberOfFaces=totalNumberOfFaces, singleMaskPerImage=True, countFaces=False, maskWidth=maskWidth, maskHeight=maskHeight, skip=0)
 
                         mask = masks[0]
 
-                        mask = maskResize(mask, maskSize, height)
+                        # mask = maskResize(mask, maskSize, height)
 
                         mask = Image.fromarray(mask)
                         redImage = Image.new("RGB", (width, height), (255, 0, 0))
@@ -690,7 +693,9 @@ class Script(scripts.Script):
             with gr.Row():
                 enabled = gr.Checkbox(label='Disabled ❌', value=False)
                 if not is_img2img:
-                    regen_btn = gr.Button(value="Swap 🎭", variant="primary", interactive=True)
+                    with gr.Column():
+                        regen_btn = gr.Button(value="Swap 🎭", variant="primary", interactive=True)
+                        gr.HTML("<p style=\"margin-bottom:3em;font-size:0.7em\">Check your output folder (this won't show results in webui)</p>",visible=True)
                 else:
                     regen_btn = gr.Button(value="Swap 🎭", variant="primary", visible=False)
             with gr.Accordion("♻ Overrides ♻", open = True):
@@ -805,8 +810,10 @@ class Script(scripts.Script):
                                 htmlTip3 = gr.HTML("<p>This divides image to smaller images and tries to find a face in the individual smaller images.</p><p>Useful when faces are small in relation to the size of the whole picture and are not being detected.</p><p>(may result in mask that only covers a part of a face or no detection if the division goes right through the face)</p><p>Open 'Split visualizer' to see how it works.</p>",visible=False)
                                 with gr.Row():
                                     divider = gr.Slider(minimum=1, maximum=5, step=1, value=1, label="How many images to divide into")
-                                    maskSize = gr.Slider(minimum=-10, maximum=10, step=1, value=1, label="Mask size")
-                                howSplit = gr.Radio(["Horizontal only ▤", "Vertical only ▥", "Both ▦"], value = "Both ▦", label = "How to divide")
+                                    maskWidth = gr.Slider(minimum=0, maximum=300, step=1, value=100, label="Mask width")
+                                with gr.Row():
+                                    howSplit = gr.Radio(["Horizontal only ▤", "Vertical only ▥", "Both ▦"], value = "Both ▦", label = "How to divide")
+                                    maskHeight = gr.Slider(minimum=0, maximum=300, step=1, value=100, label="Mask height")
                                 with gr.Accordion(label="Visualizer", open=False):
                                     exampleImage = gr.Image(value=Image.open("./extensions/batch-face-swap/images/exampleB.jpg"), label="Split visualizer", show_label=False, type="pil", visible=True).style(height=500)
                                     with gr.Row(variant='compact'):
@@ -875,7 +882,7 @@ class Script(scripts.Script):
                 loadGenParams.change(fn=None, _js="gradioApp().getElementById('mode_img2img').querySelectorAll('button')[4].click()", inputs=None, outputs=None)
 
 
-                def regen(input_path: str, searchSubdir: bool, viewResults: bool, divider: int, howSplit: str, saveMask: bool, output_path: str, saveToOriginalFolder: bool, onlyMask: bool, saveNoFace: bool, overridePrompt: bool, bfs_prompt: str, bfs_nprompt: str, overrideSampler: bool, sd_sampler: str, overrideModel: bool, sd_model: str, overrideDenoising: bool, denoising_strength: float, overrideMaskBlur: bool, mask_blur: float, overridePadding: bool, inpaint_full_res_padding: float, overrideSeed: bool, overrideSteps: bool, steps: float, overrideCfgScale: bool, cfg_scale: float, overrideSize: bool, bfs_width: float, bfs_height: float, invertMask: bool, singleMaskPerImage: bool, countFaces: bool, maskSize: float, keepOriginalName: bool, pathExisting: str, pathMasksExisting: str, output_pathExisting: str, selectedTab: str, mainTab: str, loadGenParams: bool, rotation_threshold: float, faceDetectMode: str, face_x_scale: float, face_y_scale: float, minFace: float, multiScale: float, multiScale2: float, multiScale3: float, minNeighbors: float, mpconfidence: float, mpcount: float, debugSave: bool, optimizeDetect: bool):
+                def regen(input_path: str, searchSubdir: bool, viewResults: bool, divider: int, howSplit: str, saveMask: bool, output_path: str, saveToOriginalFolder: bool, onlyMask: bool, saveNoFace: bool, overridePrompt: bool, bfs_prompt: str, bfs_nprompt: str, overrideSampler: bool, sd_sampler: str, overrideModel: bool, sd_model: str, overrideDenoising: bool, denoising_strength: float, overrideMaskBlur: bool, mask_blur: float, overridePadding: bool, inpaint_full_res_padding: float, overrideSeed: bool, overrideSteps: bool, steps: float, overrideCfgScale: bool, cfg_scale: float, overrideSize: bool, bfs_width: float, bfs_height: float, invertMask: bool, singleMaskPerImage: bool, countFaces: bool, maskWidth: float, maskHeight: float, keepOriginalName: bool, pathExisting: str, pathMasksExisting: str, output_pathExisting: str, selectedTab: str, mainTab: str, loadGenParams: bool, rotation_threshold: float, faceDetectMode: str, face_x_scale: float, face_y_scale: float, minFace: float, multiScale: float, multiScale2: float, multiScale3: float, minNeighbors: float, mpconfidence: float, mpcount: float, debugSave: bool, optimizeDetect: bool):
                     try:
                         p=original_p
                         image = input_image
@@ -885,9 +892,9 @@ class Script(scripts.Script):
 
                     facecfg = FaceDetectConfig(faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect)
 
-                    finishedImages = generateImages(p, facecfg, image, input_path, searchSubdir, viewResults, int(divider), howSplit, saveMask, output_path, saveToOriginalFolder, onlyMask, saveNoFace, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, overrideSeed, overrideSteps, steps, overrideCfgScale, cfg_scale, overrideSize, bfs_width, bfs_height, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, mainTab, loadGenParams, rotation_threshold)
+                    finishedImages = generateImages(p, facecfg, image, input_path, searchSubdir, viewResults, int(divider), howSplit, saveMask, output_path, saveToOriginalFolder, onlyMask, saveNoFace, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, overrideSeed, overrideSteps, steps, overrideCfgScale, cfg_scale, overrideSize, bfs_width, bfs_height, invertMask, singleMaskPerImage, countFaces, maskWidth, maskHeight, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, mainTab, loadGenParams, rotation_threshold)
 
-                regen_btn.click(fn=regen, inputs=[input_path, searchSubdir, viewResults, divider, howSplit, saveMask, output_path, saveToOriginalFolder, onlyMask, saveNoFace, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, overrideSeed, overrideSteps, steps, overrideCfgScale, cfg_scale, overrideSize, bfs_width, bfs_height, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, mainTab, loadGenParams, rotation_threshold, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect], outputs=None)
+                regen_btn.click(fn=regen, inputs=[input_path, searchSubdir, viewResults, divider, howSplit, saveMask, output_path, saveToOriginalFolder, onlyMask, saveNoFace, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, overrideSeed, overrideSteps, steps, overrideCfgScale, cfg_scale, overrideSize, bfs_width, bfs_height, invertMask, singleMaskPerImage, countFaces, maskWidth, maskHeight, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, mainTab, loadGenParams, rotation_threshold, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect], outputs=None)
                 
                 enabled.change(switchEnableLabel, enabled, enabled)
                 
@@ -895,14 +902,15 @@ class Script(scripts.Script):
                 onlyMask.change(switchSaveMask, onlyMask, saveMask)
                 invertMask.change(switchInvertMask, invertMask, singleMaskPerImage)
 
-                faceDetectMode.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, input_path, visualizationOpacity, faceDetectMode], exampleImage)
-                minFace.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, input_path, visualizationOpacity, faceDetectMode], exampleImage)
-                visualizationOpacity.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, input_path, visualizationOpacity, faceDetectMode], exampleImage)
-                searchSubdir.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, input_path, visualizationOpacity, faceDetectMode], exampleImage)
-                howSplit.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, input_path, visualizationOpacity, faceDetectMode], exampleImage)
-                divider.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, input_path, visualizationOpacity, faceDetectMode], exampleImage)
-                maskSize.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, input_path, visualizationOpacity, faceDetectMode], exampleImage)
-                input_path.change(updateVisualizer, [searchSubdir, howSplit, divider, maskSize, input_path, visualizationOpacity, faceDetectMode], exampleImage)
+                faceDetectMode.change(updateVisualizer, [searchSubdir, howSplit, divider, maskWidth, maskHeight, input_path, visualizationOpacity, faceDetectMode], exampleImage)
+                minFace.change(updateVisualizer, [searchSubdir, howSplit, divider, maskWidth, maskHeight, input_path, visualizationOpacity, faceDetectMode], exampleImage)
+                visualizationOpacity.change(updateVisualizer, [searchSubdir, howSplit, divider, maskWidth, maskHeight, input_path, visualizationOpacity, faceDetectMode], exampleImage)
+                searchSubdir.change(updateVisualizer, [searchSubdir, howSplit, divider, maskWidth, maskHeight, input_path, visualizationOpacity, faceDetectMode], exampleImage)
+                howSplit.change(updateVisualizer, [searchSubdir, howSplit, divider, maskWidth, maskHeight, input_path, visualizationOpacity, faceDetectMode], exampleImage)
+                divider.change(updateVisualizer, [searchSubdir, howSplit, divider, maskWidth, maskHeight, input_path, visualizationOpacity, faceDetectMode], exampleImage)
+                maskWidth.change(updateVisualizer, [searchSubdir, howSplit, divider, maskWidth, maskHeight, input_path, visualizationOpacity, faceDetectMode], exampleImage)
+                maskHeight.change(updateVisualizer, [searchSubdir, howSplit, divider, maskWidth, maskHeight, input_path, visualizationOpacity, faceDetectMode], exampleImage)
+                input_path.change(updateVisualizer, [searchSubdir, howSplit, divider, maskWidth, maskHeight, input_path, visualizationOpacity, faceDetectMode], exampleImage)
 
                 overridePrompt.change(switchColumnVisibility, overridePrompt, override_prompt_col)
                 overrideSize.change(switchColumnVisibility, overrideSize, override_size_col)
@@ -921,9 +929,9 @@ class Script(scripts.Script):
                 showTips.change(switchTipsVisibility, showTips, htmlTip5)
                 showTips.change(switchTipsVisibility, showTips, htmlTip6)
 
-        return [enabled, mainTab, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, overrideSeed, overrideSteps, steps, overrideCfgScale, cfg_scale, overrideSize, bfs_width, bfs_height, input_path, searchSubdir, divider, howSplit, saveMask, output_path, saveToOriginalFolder, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect, loadGenParams, rotation_threshold]
+        return [enabled, mainTab, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, overrideSeed, overrideSteps, steps, overrideCfgScale, cfg_scale, overrideSize, bfs_width, bfs_height, input_path, searchSubdir, divider, howSplit, saveMask, output_path, saveToOriginalFolder, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskWidth, maskHeight, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect, loadGenParams, rotation_threshold]
 
-    def process(self, p, enabled, mainTab, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, overrideSeed, overrideSteps, steps, overrideCfgScale, cfg_scale, overrideSize, bfs_width, bfs_height, input_path, searchSubdir, divider, howSplit, saveMask, output_path, saveToOriginalFolder, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect, loadGenParams, rotation_threshold):
+    def process(self, p, enabled, mainTab, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, overrideSeed, overrideSteps, steps, overrideCfgScale, cfg_scale, overrideSize, bfs_width, bfs_height, input_path, searchSubdir, divider, howSplit, saveMask, output_path, saveToOriginalFolder, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskWidth, maskHeight, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect, loadGenParams, rotation_threshold):
         
         global original_p
         global all_images
@@ -942,7 +950,7 @@ class Script(scripts.Script):
             else:
                 input_image = None
 
-            finishedImages = generateImages(p, facecfg, input_image, input_path, searchSubdir, viewResults, int(divider), howSplit, saveMask, output_path, saveToOriginalFolder, onlyMask, saveNoFace, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, overrideSeed, overrideSteps, steps, overrideCfgScale, cfg_scale, overrideSize, bfs_width, bfs_height, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, mainTab, loadGenParams, rotation_threshold)
+            finishedImages = generateImages(p, facecfg, input_image, input_path, searchSubdir, viewResults, int(divider), howSplit, saveMask, output_path, saveToOriginalFolder, onlyMask, saveNoFace, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, overrideSeed, overrideSteps, steps, overrideCfgScale, cfg_scale, overrideSize, bfs_width, bfs_height, invertMask, singleMaskPerImage, countFaces, maskWidth, maskHeight, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, mainTab, loadGenParams, rotation_threshold)
 
             if not viewResults:
                 finishedImages = []
@@ -961,7 +969,7 @@ class Script(scripts.Script):
         else:
             pass
 
-    def postprocess(self, p, processed, enabled, mainTab, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, overrideSeed, overrideSteps, steps, overrideCfgScale, cfg_scale, overrideSize, bfs_width, bfs_height, input_path, searchSubdir, divider, howSplit, saveMask, output_path, saveToOriginalFolder, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect, loadGenParams, rotation_threshold):
+    def postprocess(self, p, processed, enabled, mainTab, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, overrideSeed, overrideSteps, steps, overrideCfgScale, cfg_scale, overrideSize, bfs_width, bfs_height, input_path, searchSubdir, divider, howSplit, saveMask, output_path, saveToOriginalFolder, viewResults, saveNoFace, onlyMask, invertMask, singleMaskPerImage, countFaces, maskWidth, maskHeight, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect, loadGenParams, rotation_threshold):
 
         global all_images
         global input_image
@@ -981,7 +989,7 @@ class Script(scripts.Script):
             facecfg = FaceDetectConfig(faceDetectMode, face_x_scale, face_y_scale, minFace, multiScale, multiScale2, multiScale3, minNeighbors, mpconfidence, mpcount, debugSave, optimizeDetect)
 
 
-            finishedImages = generateImages(p, facecfg, input_image, input_path, searchSubdir, viewResults, int(divider), howSplit, saveMask, output_path, saveToOriginalFolder, onlyMask, saveNoFace, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, overrideSeed, overrideSteps, steps, overrideCfgScale, cfg_scale, overrideSize, bfs_width, bfs_height, invertMask, singleMaskPerImage, countFaces, maskSize, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, mainTab, loadGenParams, rotation_threshold)
+            finishedImages = generateImages(p, facecfg, input_image, input_path, searchSubdir, viewResults, int(divider), howSplit, saveMask, output_path, saveToOriginalFolder, onlyMask, saveNoFace, overridePrompt, bfs_prompt, bfs_nprompt, overrideSampler, sd_sampler, overrideModel, sd_model, overrideDenoising, denoising_strength, overrideMaskBlur, mask_blur, overridePadding, inpaint_full_res_padding, overrideSeed, overrideSteps, steps, overrideCfgScale, cfg_scale, overrideSize, bfs_width, bfs_height, invertMask, singleMaskPerImage, countFaces, maskWidth, maskHeight, keepOriginalName, pathExisting, pathMasksExisting, output_pathExisting, selectedTab, mainTab, loadGenParams, rotation_threshold)
 
             if not viewResults:
                 finishedImages = []
@@ -996,3 +1004,15 @@ class Script(scripts.Script):
             processed.images = all_images
         else:
             pass
+
+# def on_ui_settings():
+#     section = ('bfs', "BatchFaceSwap")
+#     shared.opts.add_option("bfs_override_prompt", shared.OptionInfo(
+#         False, "Default state of Override Prompt", gr.Checkbox, {"interactive": True}, section=section))
+#     shared.opts.add_option("bfs_prompt", shared.OptionInfo(
+#         "", "Default Prompt", section=section))
+#     shared.opts.add_option("bfs_nprompt", shared.OptionInfo(
+#         "", "Default Negative Prompt", section=section))
+
+
+# script_callbacks.on_ui_settings(on_ui_settings)

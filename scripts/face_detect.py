@@ -2,6 +2,8 @@ FaceDetectDevelopment = False # set to True enable the development panel UI
 
 from modules import images
 from modules.shared import opts
+from modules.paths import models_path
+from modules.textual_inversion import autocrop
 
 from PIL import Image, ImageOps
 
@@ -9,6 +11,7 @@ import mediapipe as mp
 import numpy as np
 import math
 import cv2
+import sys
 import os
 from enum import IntEnum
 
@@ -18,19 +21,21 @@ class FaceMode(IntEnum):
     OPENCV_NORMAL=1
     OPENCV_SLOW=2
     OPENCV_SLOWEST=3
-    DEVELOPMENT=4 # must be highest numbered to avoid breaking UI
+    YUNET=4
+    DEVELOPMENT=5 # must be highest numbered to avoid breaking UI
 
-    DEFAULT=1     # the one the UI defaults to
+    DEFAULT=4     # the one the UI defaults to
 
 # for the UI dropdown, we want an array that's indexed by the above numbers, and we don't want
 # bugs if you tweak them and don't keep the array in sync, so initialize the array explicitly
 # using them as indices:
 
 face_mode_init = [
-    (FaceMode.ORIGINAL      , "Fastest (mediapipe FaceMesh, max 5 faces)"),
-    (FaceMode.OPENCV_NORMAL , "Normal (OpenCV + FaceMesh)"),
-    (FaceMode.OPENCV_SLOW   , "Slow (OpenCV + FaceMesh)"),
-    (FaceMode.OPENCV_SLOWEST, "Extremely slow (OpenCV + FaceMesh)")
+    (FaceMode.ORIGINAL      , "Fastest (mediapipe, max 5 faces)"),
+    (FaceMode.OPENCV_NORMAL , "Normal (OpenCV + mediapipe)"),
+    (FaceMode.OPENCV_SLOW   , "Slow (OpenCV + mediapipe)"),
+    (FaceMode.OPENCV_SLOWEST, "Extremely slow (OpenCV + mediapipe)"),
+    (FaceMode.YUNET, "YuNet (YuNet + mediapipe)")
 ]
 if FaceDetectDevelopment:
     face_mode_init.append((FaceMode.DEVELOPMENT, "Development testing"))
@@ -296,6 +301,37 @@ def getFaceRectangles(image, known_face_rects, facecfg):
         current = cv2.resize(gray, (width, height), interpolation=cv2.INTER_LANCZOS4)
 
     return all_faces
+
+def getFaceRectanglesYuNet(img_array, known_face_rects):
+    new_faces = []
+    dnn_model_path = autocrop.download_and_cache_models(os.path.join(models_path, "opencv"))
+    face_detector = cv2.FaceDetectorYN.create(dnn_model_path, "", (0, 0))
+    
+    face_detector.setInputSize((img_array.shape[1], img_array.shape[0]))
+    _, faces = face_detector.detect(img_array)
+
+    if faces is None:
+        return new_faces
+
+    face_coords = []
+    for face in faces:
+        if math.isinf(face[0]):
+            continue
+        x = int(face[0])
+        y = int(face[1])
+        w = int(face[2])
+        h = int(face[3])
+        if w == 0 or h == 0:
+            print("ignore w,h = 0 face")
+            continue
+
+        face_coords.append( [ x, y, w, h ] )
+    
+    for r in face_coords:
+        if rectangleListOverlap(known_face_rects, r) is None:
+            new_faces.append(r)
+    
+    return new_faces
 
 #####################################################################################################################
 #

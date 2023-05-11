@@ -41,41 +41,37 @@ def composite(image1, image2, mask, visualizationOpacity):
 
     return image
 
-def findBiggestFace(inputImage):
-    # Store a copy of the input image:
-    biggestFace = inputImage.copy()
-    # Set initial values for the
-    # largest contour:
-    largestArea = 0
-    largestContourIndex = 0
+def maskResize(mask, maskWidth, maskHeight):
+    maskOriginal = mask
+    try:
+        contours, hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    except IndexError:
+        return mask
+    x,y,w,h = cv2.boundingRect(contours[0])
+    center_x = x + w // 2
+    center_y = y + h // 2
 
-    # Find the contours on the binary image:
-    contours, hierarchy = cv2.findContours(inputImage, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+    # Get the bounding box of the contour
+    x,y,w,h = cv2.boundingRect(contours[0])
 
-    # Get the largest contour in the contours list:
-    for i, cc in enumerate(contours):
-        # Find the area of the contour:
-        area = cv2.contourArea(cc)
-        # Store the index of the largest contour:
-        if area > largestArea:
-            largestArea = area
-            largestContourIndex = i
+    # Crop the image
+    cropped = maskOriginal[y:y+h,x:x+w]
 
-    # Once we get the biggest face, paint it black:
-    tempMat = inputImage.copy()
-    cv2.drawContours(tempMat, contours, largestContourIndex, (0, 0, 0), -1, 8, hierarchy)
-    # Erase smaller faces:
-    biggestFace = biggestFace - tempMat
+    # Resize the cropped image by percentage
+    height, width = cropped.shape[:2]
+    new_height = max(int(height * maskWidth / 100), 1)
+    new_width = max(int(width * maskHeight / 100), 1)
+    resized = cv2.resize(cropped, (new_width, new_height))
 
-    return biggestFace
+    # Create black image with same resolution as original image
+    black_image = Image.fromarray(np.zeros((maskOriginal.shape[0], maskOriginal.shape[1]), np.uint8))
 
-def maskResize(mask, maskSize, height):
-    size = maskSize * (0.011*height)/5
-    kernel = np.ones((int(math.ceil((0.011*height)+abs(size))),int(math.ceil((0.011*height)+abs(size)))),'uint8')
-    if size > 0:
-        mask = cv2.dilate(mask,kernel,iterations=1)
-    else:
-        mask = cv2.erode(mask,kernel,iterations=1)
+    # Paste cropped image back to original image so that center of white part on new image matches center of white part on original image
+    height, width = resized.shape[:2]
+    x_offset = center_x - width // 2
+    y_offset = center_y - height // 2
+    black_image.paste(Image.fromarray(resized), (x_offset, y_offset))
+    mask = np.array(black_image)
 
     return mask
 
@@ -154,8 +150,10 @@ Steps: {json_info["steps"]}, Sampler: {sampler}, CFG scale: {json_info["scale"]}
 def infotext(p, iteration=0, position_in_batch=0, comments={}):
         if p.all_prompts == None:
             p.all_prompts = [p.prompt]
+        p.all_prompts = [p.prompt]
         if p.all_negative_prompts == None:
             p.all_negative_prompts = [p.negative_prompt]
+        p.all_negative_prompts = [p.negative_prompt]
         if p.all_seeds == None:
             p.all_seeds = [p.seed]
         if p.all_subseeds == None:
