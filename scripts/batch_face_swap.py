@@ -205,7 +205,7 @@ def findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertic
     # except cv2.error:
     #     mask = dilated
 
-    if singleMaskPerImage:
+    if singleMaskPerImage and len(binary_masks) > 0:
         result = []
         h, w = binary_masks[0].shape
         result = np.full((h,w), 0, dtype=np.uint8)
@@ -587,14 +587,17 @@ class Script(scripts.Script):
                         # if len(masks)==0 and path != '':
                         masks, totalNumberOfFaces, faces_info, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file=None, totalNumberOfFaces=totalNumberOfFaces, singleMaskPerImage=True, countFaces=False, maskWidth=maskWidth, maskHeight=maskHeight, skip=0)
 
-                        mask = masks[0]
+                        if len(masks) > 0:
+                            mask = masks[0]
+                        else:
+                            mask = np.zeros((image.height, image.width, 3), dtype=np.uint8)
 
                         # mask = maskResize(mask, maskSize, height)
 
                         mask = Image.fromarray(mask)
                         redImage = Image.new("RGB", (width, height), (255, 0, 0))
 
-                        mask.convert("L")
+                        mask = mask.convert("L")
                         draw = ImageDraw.Draw(mask, "L")
 
                         if divider > 1:
@@ -622,14 +625,17 @@ class Script(scripts.Script):
                         # if len(masks)==0 and path != '':
                         masks, totalNumberOfFaces, faces_info, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file=None, totalNumberOfFaces=totalNumberOfFaces, singleMaskPerImage=True, countFaces=False, maskWidth=maskWidth, maskHeight=maskHeight, skip=0)
 
-                        mask = masks[0]
+                        if len(masks) > 0:
+                            mask = masks[0]
+                        else:
+                            mask = np.zeros((image.height, image.width, 3), dtype=np.uint8)
 
                         # mask = maskResize(mask, maskSize, height)
 
                         mask = Image.fromarray(mask)
                         redImage = Image.new("RGB", (width, height), (255, 0, 0))
 
-                        mask.convert("L")
+                        mask = mask.convert("L")
                         draw = ImageDraw.Draw(mask, "L")
 
                         if divider > 1:
@@ -650,14 +656,17 @@ class Script(scripts.Script):
                         # if len(masks)==0 and path != '':
                         masks, totalNumberOfFaces, faces_info, skip = findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertical, file=None, totalNumberOfFaces=totalNumberOfFaces, singleMaskPerImage=True, countFaces=False, maskWidth=maskWidth, maskHeight=maskHeight, skip=0)
 
-                        mask = masks[0]
+                        if len(masks) > 0:
+                            mask = masks[0]
+                        else:
+                            mask = np.zeros((image.height, image.width, 3), dtype=np.uint8)
 
                         # mask = maskResize(mask, maskSize, height)
 
                         mask = Image.fromarray(mask)
                         redImage = Image.new("RGB", (width, height), (255, 0, 0))
 
-                        mask.convert("L")
+                        mask = mask.convert("L")
                         draw = ImageDraw.Draw(mask, "L")
 
                         if divider > 1:

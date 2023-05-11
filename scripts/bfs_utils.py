@@ -59,8 +59,8 @@ def maskResize(mask, maskWidth, maskHeight):
 
     # Resize the cropped image by percentage
     height, width = cropped.shape[:2]
-    new_height = max(int(height * maskWidth / 100), 1)
-    new_width = max(int(width * maskHeight / 100), 1)
+    new_height = max(int(height * maskHeight / 100), 1)
+    new_width = max(int(width * maskWidth / 100), 1)
     resized = cv2.resize(cropped, (new_width, new_height))
 
     # Create black image with same resolution as original image
