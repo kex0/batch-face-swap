@@ -263,6 +263,8 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, outpu
     inpainting_fill = 1
     
     wasGrid = p.do_not_save_grid
+    wasReturnGrid = opts.return_grid
+    opts.return_grid = False
     p.do_not_save_grid = True
     p.do_not_save_samples = True
     index = 0
@@ -376,6 +378,7 @@ def faceSwap(p, masks, image, finishedImages, invertMask, forced_filename, outpu
 
     p.do_not_save_samples = False
     p.do_not_save_grid = wasGrid
+    opts.return_grid = wasReturnGrid
 
     return finishedImages
 
