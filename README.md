@@ -1,3 +1,6 @@
+# !!! This project is no longer being maintained !!!
+## I recommend trying these extensions instead https://github.com/Bing-su/adetailer and/or https://github.com/Gourieff/sd-webui-reactor
+
 ## Batch Face Swap extension for https://github.com/AUTOMATIC1111/stable-diffusion-webui
  Automaticaly detects faces and replaces them.
  
