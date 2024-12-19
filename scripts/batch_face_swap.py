@@ -174,8 +174,8 @@ def findFaces(facecfg, image, width, height, divider, onlyHorizontal, onlyVertic
                     new_image.paste(processed_image, (x, y))                 
             masks.append(new_image)
 
-    if countFaces:
-        return totalNumberOfFaces
+    # if countFaces:
+    #     return totalNumberOfFaces
 
     if file != None:
         if FaceDetectDevelopment:

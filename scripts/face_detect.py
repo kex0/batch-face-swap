@@ -304,7 +304,7 @@ def getFaceRectangles(image, known_face_rects, facecfg):
 
 def getFaceRectanglesYuNet(img_array, known_face_rects):
     new_faces = []
-    dnn_model_path = autocrop.download_and_cache_models(os.path.join(models_path, "opencv"))
+    dnn_model_path = autocrop.download_and_cache_models()
     face_detector = cv2.FaceDetectorYN.create(dnn_model_path, "", (0, 0))
     
     face_detector.setInputSize((img_array.shape[1], img_array.shape[0]))
